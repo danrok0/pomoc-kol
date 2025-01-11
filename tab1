@@ -1,0 +1,14 @@
+//Oto funkcja max, która przyjmuje tablicę liczb całkowitych oraz jej długość jako argumenty, a następnie zwraca największy element tej tablicy:
+#include <stdio.h>
+
+int max(int tab[], int n) {
+    int max_value = tab[0]; // Zakładamy, że pierwszy element jest największy
+    
+    for (int i = 1; i < n; i++) {
+        if (tab[i] > max_value) {
+            max_value = tab[i]; // Znaleziono większy element
+        }
+    }
+    
+    return max_value;
+}
