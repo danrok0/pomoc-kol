@@ -1,0 +1,100 @@
+/*Obliczenia matematyczne w pętli
+
+
+double result = 1.0;
+double term;
+int i = 1;
+
+do {
+    term = 1.0 / factorial(i); // Oblicz składnik
+    result += term;            // Dodaj do wyniku
+    i++;
+} while (term > 0.00001);       // Kontynuuj, dopóki składnik jest większy od dokładności
+
+//Operacje na łańcuchach znaków
+
+
+for (int i = 0; str[i] != '\0'; i++) {
+    if (islower(str[i])) {
+        str[i] = toupper(str[i]);
+    } else if (isupper(str[i])) {
+        str[i] = tolower(str[i]);
+    }
+}
+//Funkcje islower, isupper, tolower, toupper są standardem do operacji na znakach.
+//Zawsze zakończ operacje na łańcuchach po napotkaniu \0.
+
+//Rysowanie wzorów za pomocą pętli zagnieżdżonych
+
+
+for (int i = 1; i <= n; i++) {      // Pętla dla wierszy
+    for (int j = 1; j <= i; j++) {  // Pętla dla kolumn w wierszu
+        printf("%d ", j);           // Wyświetl liczby
+    }
+    printf("\n");                   // Przejdź do nowego wiersza
+}
+//Zagnieżdżone pętle są niezbędne do obsługi wzorów i tablic wielowymiarowych.  Upewnij się, że każda iteracja kończy odpowiedni wiersz (np. printf("\n");).
+
+//4. Operacje na tablicach (jedno- i wielowymiarowych)
+// Jednowymiarowe tablice
+
+
+for (int i = 0; i < n; i++) {
+    if (arr[i] == szukana_wartosc) {
+        printf("Znaleziono na indeksie: %d\n", i);
+    }
+}
+
+//Tablice wielowymiarowe
+//Używaj zagnieżdżonych pętli, aby odczytać lub przetwarzać elementy.  Przykład: Suma głównej przekątnej w tablicy 4x4.
+
+
+for (int i = 0; i < 4; i++) {
+    sum += tablica[i][i]; // Elementy na głównej przekątnej mają równe indeksy
+}
+//5. Rekurencja Schemat: Funkcja wywołuje sama siebie, aż do osiągnięcia warunku końcowego. Kluczowe elementy: Zdefiniuj warunek końcowy (np  n==0). Z każdym wywołaniem zmniejszaj problem (np. n−1). Przykład: Rekurencyjne obliczanie silni.
+
+
+int factorial(int n) {
+    if (n == 0 || n == 1) {
+        return 1; // Warunek zakończenia
+    }
+    return n * factorial(n - 1); // Rekurencyjne wywołanie
+}
+//Zapamiętaj: Rekurencja może zastąpić niektóre pętle, ale łatwo prowadzi do błędów (np. brak warunku końcowego). Uważaj na limity głębokości stosu dla dużych wartości n.
+
+//6. Sortowanie za pomocą qsort. Schemat: Użyj funkcji qsort z własną funkcją porównującą. Kluczowe elementy:
+//Funkcja porównująca powinna zwracać -1, 0, lub 1, w zależności od relacji między dwoma elementami.
+//Przykład: Sortowanie tablicy.
+
+
+#include <stdlib.h>
+
+int compare(const void *a, const void *b) {
+    return (*(int*)a - *(int*)b); // Porównanie dwóch liczb całkowitych
+}
+
+qsort(tablica, rozmiar, sizeof(int), compare); // Sortowanie tablicy
+//Zapamiętaj:
+
+//qsort jest uniwersalne i działa z różnymi typami danych.
+//Funkcja porównująca musi odpowiednio rzutować wskaźniki.
+
+// 7. Wczytywanie danych od użytkownika
+//Schemat: Używaj funkcji takich jak scanf lub fgets do wczytywania danych.
+//Przykład: Wczytywanie tablicy liczb.
+
+
+
+for (int i = 0; i < n; i++) {
+    scanf("%d", &tablica[i]); // Wczytaj kolejne liczby
+}
+//Zapamiętaj:
+
+//Dla tablic wielowymiarowych musisz użyć zagnieżdżonych pętli.
+//fgets jest bezpieczniejsze do wczytywania ciągów znaków niż scanf.
+
+
+
+
+*/
