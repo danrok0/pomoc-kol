@@ -1,0 +1,23 @@
+#include <stdio.h>
+
+double factorial(int n) {
+    double result = 1.0;
+    for (int i = 1; i <= n; i++) {
+        result *= i;
+    }
+    return result;
+}
+
+int main() {
+    double e = 1.0, term;
+    int i = 1;
+
+    do {
+        term = 1.0 / factorial(i);
+        e += term;
+        i++;
+    } while (term > 0.00001); // Określamy dokładność
+
+    printf("Przyblizona wartosc e: %.5f\n", e);
+    return 0;
+}
