@@ -1,0 +1,177 @@
+//Tablica jednoliniowa (np. wypełnianie wartości, przetwarzanie danych)
+//Inicjalizacja i wyświetlanie tablicy:
+
+
+#include <stdio.h>
+
+int main() {
+    int n;
+    printf("Podaj rozmiar tablicy: ");
+    scanf("%d", &n);
+    
+    int arr[n];
+    
+    // Wypełnianie tablicy danymi
+    for (int i = 0; i < n; i++) {
+        arr[i] = i * i;  // Przykład: wypełnianie tablicy kwadratami liczb
+    }
+    
+    // Wyświetlanie tablicy
+    printf("Tablica: ");
+    for (int i = 0; i < n; i++) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+
+    return 0;
+}
+
+
+//Zliczanie największej liczby w tablicy:
+
+#include <stdio.h>
+
+int main() {
+    int n;
+    printf("Podaj rozmiar tablicy: ");
+    scanf("%d", &n);
+
+    int arr[n];
+    printf("Podaj elementy tablicy:\n");
+    for (int i = 0; i < n; i++) {
+        scanf("%d", &arr[i]);
+    }
+
+    int max = arr[0];
+    for (int i = 1; i < n; i++) {
+        if (arr[i] > max) {
+            max = arr[i];
+        }
+    }
+
+    printf("Największa liczba to: %d\n", max);
+
+    return 0;
+}
+
+
+//Sortowanie bąbelkowe 
+
+#include <stdio.h>
+
+void bubbleSort(int arr[], int n) {
+    for (int i = 0; i < n-1; i++) {
+        for (int j = 0; j < n-i-1; j++) {
+            if (arr[j] > arr[j+1]) {
+                int temp = arr[j];
+                arr[j] = arr[j+1];
+                arr[j+1] = temp;
+            }
+        }
+    }
+}
+
+int main() {
+    int n;
+    printf("Podaj rozmiar tablicy: ");
+    scanf("%d", &n);
+
+    int arr[n];
+    printf("Podaj elementy tablicy:\n");
+    for (int i = 0; i < n; i++) {
+        scanf("%d", &arr[i]);
+    }
+
+    bubbleSort(arr, n);
+
+    printf("Posortowana tablica: ");
+    for (int i = 0; i < n; i++) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+
+    return 0;
+}
+
+
+//Szukaj elementu w tablicy (np. wyszukiwanie liniowe)
+
+#include <stdio.h>
+
+int linearSearch(int arr[], int n, int key) {
+    for (int i = 0; i < n; i++) {
+        if (arr[i] == key) {
+            return i;  // Zwróci indeks, jeśli znaleziono
+        }
+    }
+    return -1;  // Zwróci -1, jeśli nie znaleziono
+}
+
+int main() {
+    int n, key;
+    printf("Podaj rozmiar tablicy: ");
+    scanf("%d", &n);
+
+    int arr[n];
+    printf("Podaj elementy tablicy:\n");
+    for (int i = 0; i < n; i++) {
+        scanf("%d", &arr[i]);
+    }
+
+    printf("Podaj element do wyszukania: ");
+    scanf("%d", &key);
+
+    int result = linearSearch(arr, n, key);
+    if (result != -1) {
+        printf("Element %d znaleziony na indeksie %d.\n", key, result);
+    } else {
+        printf("Element %d nie został znaleziony.\n", key);
+    }
+
+    return 0;
+}
+
+
+//Operacje na macierzach
+//dodawanie macierzy
+
+#include <stdio.h>
+
+int main() {
+    int m, n;
+    printf("Podaj liczbę wierszy i kolumn macierzy: ");
+    scanf("%d %d", &m, &n);
+
+    int A[m][n], B[m][n], C[m][n];
+
+    printf("Podaj elementy pierwszej macierzy:\n");
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            scanf("%d", &A[i][j]);
+        }
+    }
+
+    printf("Podaj elementy drugiej macierzy:\n");
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            scanf("%d", &B[i][j]);
+        }
+    }
+
+    // Dodawanie macierzy
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            C[i][j] = A[i][j] + B[i][j];
+        }
+    }
+
+    printf("Wynik dodawania macierzy:\n");
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            printf("%d ", C[i][j]);
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
