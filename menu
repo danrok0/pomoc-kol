@@ -1,0 +1,22 @@
+#include <stdio.h>
+#include <limits.h>
+
+int menu() {
+    int opcja;
+    
+    while (1) {
+        printf("WITAJ W MOIM PROGRAMIE\n");
+        printf("WPISZ LICZBE Z MENU\n");
+        printf("1 - wypisanie liczby INT_MAX\n");
+        printf("0 - wyjscie z programu\n");
+        
+        scanf("%d", &opcja);
+        
+        if (opcja == 1) {
+            printf("%d\n", INT_MAX);
+            return opcja;
+        } else if (opcja == 0) {
+            return opcja;
+        }
+    }
+}
