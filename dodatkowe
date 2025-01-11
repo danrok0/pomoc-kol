@@ -1,0 +1,63 @@
+//Tablice wielowymiarowe Przykład: Suma elementów na głównej przekątnej
+
+#include <stdio.h>
+
+int main() {
+    int arr[4][4] = {
+        {1, 2, 3, 4},
+        {5, 6, 7, 8},
+        {9, 10, 11, 12},
+        {13, 14, 15, 16}
+    };
+
+    int sum = 0;
+    for (int i = 0; i < 4; i++) {
+        sum += arr[i][i]; // Elementy na przekątnej
+    }
+
+    printf("Suma przekatnej: %d\n", sum);
+    return 0;
+}
+
+//Jednowymiarowe tablice Tablice jednowymiarowe są często używane do przechowywania i przetwarzania list liczb.  Przykład: Sortowanie i wyszukiwanie
+
+#include <stdio.h>
+#include <stdlib.h>  // Dla qsort
+
+int compare(const void *a, const void *b) {
+    return (*(int*)a - *(int*)b); // Funkcja porównująca dla qsort
+}
+
+void find_element(int arr[], int size, int x) {
+    int found = 0;
+    for (int i = 0; i < size; i++) {
+        if (arr[i] == x) {
+            printf("Liczba %d znajduje sie na indeksie: %d\n", x, i);
+            found = 1;
+        }
+    }
+    if (!found) {
+        printf("Liczba %d nie wystepuje w tablicy.\n", x);
+    }
+}
+
+int main() {
+    int arr[8] = {4, 2, 5, 2, 3, 5, 1, 4};
+    int n = sizeof(arr) / sizeof(arr[0]);
+
+    qsort(arr, n, sizeof(int), compare); // Sortowanie tablicy
+    printf("Posortowana tablica: ");
+    for (int i = 0; i < n; i++) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+
+    int x;
+    printf("Podaj liczbe do znalezienia: ");
+    scanf("%d", &x);
+    find_element(arr, n, x);
+
+    return 0;
+}
+
+
