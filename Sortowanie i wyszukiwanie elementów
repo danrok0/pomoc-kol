@@ -1,0 +1,39 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+int compare(const void *a, const void *b) {
+    return (*(int*)a - *(int*)b);
+}
+
+int main() {
+    int arr[8], num, found = 0;
+    printf("Wprowadz 8 liczb: ");
+    for (int i = 0; i < 8; i++) {
+        scanf("%d", &arr[i]);
+    }
+
+    qsort(arr, 8, sizeof(int), compare); // Sortowanie
+
+    printf("Posortowana tablica: ");
+    for (int i = 0; i < 8; i++) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+
+    printf("Podaj liczbe do wyszukania: ");
+    scanf("%d", &num);
+
+    printf("Liczba %d znajduje sie na indeksach: ", num);
+    for (int i = 0; i < 8; i++) {
+        if (arr[i] == num) {
+            printf("%d ", i);
+            found = 1;
+        }
+    }
+
+    if (!found) {
+        printf("Brak takiej liczby w tablicy.\n");
+    }
+
+    return 0;
+}
