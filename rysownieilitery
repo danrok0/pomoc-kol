@@ -268,3 +268,51 @@ int main() {
 
 
 
+//O
+
+#include <stdio.h>
+
+void printO(int size) {
+    if (size < 3) {
+        printf("Rozmiar musi być większy lub równy 3.\n");
+        return;
+    }
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            // Warunki rysowania "O":
+            // 1. Górna i dolna krawędź
+            if (i == 0 || i == size - 1) {
+                if (j > 0 && j < size - 1) { // Gwiazdki tylko w środku, nie na rogach
+                    printf("*");
+                } else {
+                    printf(" ");
+                }
+            }
+            // 2. Lewa i prawa krawędź
+            else if (j == 0 || j == size - 1) {
+                printf("*");
+            }
+            // Wypełnienie środka
+            else {
+                printf(" ");
+            }
+        }
+        printf("\n");
+    }
+}
+
+int main() {
+    int size;
+
+    // Pobranie rozmiaru od użytkownika
+    printf("Podaj rozmiar litery O (minimum 3): ");
+    scanf("%d", &size);
+
+    // Wywołanie funkcji rysującej "O"
+    printO(size);
+
+    return 0;
+}
+
+
