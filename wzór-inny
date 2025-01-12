@@ -1,0 +1,109 @@
+//sd
+
+
+#include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
+
+// Funkcja sprawdzająca poprawność wejścia
+int isValidInput(const char *input) {
+    for (int i = 0; input[i] != '\0'; i++) {
+        if (input[i] < '0' || input[i] > '9') {
+            return 0; // Zawiera niecyfrowe znaki
+        }
+    }
+    return 1; // Wszystkie znaki to cyfry
+}
+
+int main() {
+    char input[100];
+    int n;
+
+    printf("Podaj liczbę całkowitą n: ");
+    scanf("%s", input);
+
+    // Sprawdzanie poprawności wejścia
+    if (!isValidInput(input)) {
+        printf("Błąd: Nieprawidłowe dane wejściowe.\n");
+        return 1;
+    }
+
+    // Konwersja na liczbę całkowitą
+    n = atoi(input);
+
+    // Sprawdzenie, czy n jest nieujemne
+    if (n < 0) {
+        printf("Błąd: Liczba musi być nieujemna.\n");
+        return 1;
+    }
+
+    // Obliczanie liczby złotego podziału
+    double phi = (1 + sqrt(5)) / 2;
+
+    // Zaokrąglenie do n-tego miejsca po przecinku
+    if (n >= 2) {
+        printf("Złoty podział do %d miejsca po przecinku: %.*f\n", n, n, phi);
+    } else {
+        printf("Złoty podział zaokrąglony do %d miejsca: %.0f\n", n, round(phi));
+    }
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+// Funkcja obliczająca wartość liczby złotego podziału zaokrągloną do n-tego miejsca po przecinku.
+void calculateGoldenRatio(int n) {
+    // Definicja liczby złotego podziału
+    double goldenRatio = (1 + sqrt(5)) / 2;
+
+    // Jeśli n < 2, zaokrąglamy do najbliższej cyfry n-tej
+    if (n < 2) {
+        double roundedValue = round(goldenRatio); // Zaokrąglamy do liczby całkowitej
+        printf("Liczba złotego podziału zaokrąglona do %d miejsca: %.0f\n", n, roundedValue);
+        return;
+    }
+
+    // Przygotowujemy mnożnik do zaokrąglenia do n-tego miejsca po przecinku
+    double multiplier = pow(10, n);
+
+    // Zaokrąglamy liczbę złotego podziału do n-tego miejsca po przecinku
+    double roundedValue = round(goldenRatio * multiplier) / multiplier;
+
+    // Wyświetlamy wynik
+    printf("Liczba złotego podziału zaokrąglona do %d miejsca: %.*f\n", n, n, roundedValue);
+}
+
+int main() {
+    char input[50]; // Bufor na dane wejściowe użytkownika
+    int n;          // Liczba miejsc po przecinku
+
+    // Wczytujemy liczbę całkowitą od użytkownika
+    printf("Podaj liczbę całkowitą n: ");
+    if (fgets(input, sizeof(input), stdin) == NULL || sscanf(input, "%d", &n) != 1) {
+        printf("Błąd: Nieprawidłowe dane wejściowe.\n");
+        return 1; // Zakończ działanie programu z błędem
+    }
+
+    // Sprawdzamy, czy wartość n jest dodatnia
+    if (n < 0) {
+        printf("Błąd: Liczba n musi być nieujemna.\n");
+        return 1; // Zakończ działanie programu z błędem
+    }
+
+    // Obliczamy wartość złotego podziału do n-tego miejsca
+    calculateGoldenRatio(n);
+
+    return 0; // Zakończ program poprawnie
+}
