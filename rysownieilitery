@@ -315,4 +315,47 @@ int main() {
     return 0;
 }
 
+#include <stdio.h>
+
+void printO(int size) {
+    if (size < 3) {
+        printf("Rozmiar musi być większy lub równy 3.\n");
+        return;
+    }
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            // Warunki rysowania "O":
+            if ((i == 0 || i == size - 1) && j > 0 && j < size - 1) {
+                // Górna i dolna krawędź
+                printf("*");
+            } else if ((j == 0 || j == size - 1) && i > 0 && i < size - 1) {
+                // Lewa i prawa krawędź
+                printf("*");
+            } else {
+                // Wypełnienie środka
+                printf(" ");
+            }
+
+            // Dodaj odstęp po każdej gwiazdce z wyjątkiem ostatniej w wierszu
+            if (j < size - 1) {
+                printf(" ");
+            }
+        }
+        printf("\n"); // Przejdź do nowej linii po każdym wierszu
+    }
+}
+
+int main() {
+    int size;
+
+    // Pobranie rozmiaru od użytkownika
+    printf("Podaj rozmiar litery O (minimum 3): ");
+    scanf("%d", &size);
+
+    // Wywołanie funkcji rysującej "O"
+    printO(size);
+
+    return 0;
+}
 
