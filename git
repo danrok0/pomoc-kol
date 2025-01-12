@@ -1,0 +1,42 @@
+1. Klonowanie nowego repozytorium
+Jeśli masz już link URL do nowo założonego repozytorium (np. https://github.com/username/repo.git), musisz go sklonować na swój lokalny komputer:
+
+
+git clone https://github.com/username/repo.git
+To utworzy lokalny folder z nazwą repozytorium.
+
+2. Dodanie plików do repozytorium
+Przejdź do sklonowanego folderu:
+
+
+cd repo
+Skopiuj pliki, które chcesz dodać, do tego folderu. Następnie wykonaj polecenie, aby dodać pliki do systemu kontroli wersji:
+
+
+git add .
+3. Zatwierdzenie zmian
+Zatwierdź zmiany w lokalnym repozytorium:
+
+
+git commit -m "Dodanie plików do nowego repozytorium"
+4. Wypchnięcie zmian na GitHub
+Prześlij zmiany na GitHub:
+
+
+git push origin main
+Jeśli domyślna gałąź Twojego repozytorium ma inną nazwę niż main (np. master), dostosuj ostatnie polecenie:
+
+
+git push origin master
+5. Sprawdzenie na GitHub
+Wejdź na stronę repozytorium, aby upewnić się, że pliki zostały poprawnie przesłane.
+
+Przydatne uwagi:
+Jeśli nie masz jeszcze skonfigurowanego Git-a, upewnij się, że ustawiłeś swoją tożsamość:
+
+
+git config --global user.name "Twoje Imię"
+git config --global user.email "twoj_email@example.com"
+Jeśli repozytorium jest prywatne, możesz potrzebować uwierzytelnienia (tokenu dostępu lub hasła).
+
+Alternatywnie możesz użyć GitHub Desktop lub funkcji przesyłania plików przez interfejs webowy, jeśli wolisz pracować graficznie.
