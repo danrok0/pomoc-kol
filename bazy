@@ -1,0 +1,139 @@
+DROP TABLE IF EXISTS person;
+DROP TABLE IF EXISTS address;
+DROP TABLE IF EXISTS job_position;
+
+CREATE TABLE address (
+	id INTEGER PRIMARY KEY,
+	locality VARCHAR(30),
+	street VARCHAR(30),
+	house_number INTEGER,
+	apartment_number INTEGER,
+	postal_code CHAR(6)
+);
+
+CREATE TABLE job_position (
+	id INTEGER PRIMARY KEY,
+	title VARCHAR(30),
+	salary DECIMAL(8, 2),
+	extra_payment DECIMAL(8, 2)
+);
+
+CREATE TABLE person (
+	id INTEGER PRIMARY KEY,
+	address_id INTEGER REFERENCES address(id),
+	job_position_id INTEGER REFERENCES job_position(id),
+	first_name VARCHAR(30),
+	last_name VARCHAR(30),
+	gender CHAR(1),
+	birth_date DATE, 
+	pesel CHAR(11)
+);
+do podanej tabeli która ma przykładowe dane w środku wykonaj zadania w sql:
+
+Zadanie 1. Wykonaj zapytanie, które wyświetli:
+
+    wszystkie adresy (wszystkie wartości pól tabeli address).
+    jedynie nazwy stanowisk, pensję i dodatek do pensji (wartości pól title, salary, job_position extra_payment z tabeli).
+    jedynie imiona, nazwiska, numerów pesel, daty urodzenia i płeć wszystkich osób w podanej kolejności (wartości pól first_name, last_name, pesel, birth_date, gender z tabeli person).
+
+
+Zadanie 2. Wykorzystując sortowanie, wykonaj zapytanie, które wyświetli:
+
+    nazwy stanowisk, posortowane rosnąco.
+    imiona i nazwiska wszystkich osób, które są posortowane rosnąco wg nazwiska, następnie wg imienia.
+    nazwy stanowisk, które są posortowane malejąco wg pensji, jeżeli pensja jest taka sam,a to powinien być posortowany rosnąco wg nazwy stanowiska.
+
+
+Zadanie 3. Wykorzystując możliwość wybierania danych bez powtórzeń, wykonaj zapytanie, które wyświetli:
+
+    nazwy imiona osób bez powtórzeń.
+    nazwy miejscowości i ulic adresów bez powtórzeń.
+    nazwy miejscowości i ulic adresów bez powtórzeń, posortowane malejąco wg miejscowości, jeżeli nazwa miejscowości jest taka sama, to powinien być posortowane malejąco wg nazwy ulicy.
+
+
+Zadanie 4. Wykorzystując możliwość wybierania pierwszych n danych, wykonaj zapytanie, które wyświetli:
+
+    nazwy pierwszych trzech stanowisk, które posiadają najmniejsze pensje.
+    imię, nazwisko i numer pesel najstarszej osoby.
+    pierwszych pięć adresów miejscowości Gdańsk, które mają największy numer mieszkania.
+
+
+Zadanie 5. Wykorzystując możliwość określania kryteriów, wykonaj zapytanie, które wyświetli:
+
+    numery pesel wszystkich mężczyzn (symbol 'm').
+    imiona, nazwiska i numery pesel, osób, które mają na imię Stefan.
+    nazwy stanowisk i pensji, stanowisk, które zarabiają więcej niż 3500 zł.
+
+
+Zadanie 6. Wykorzystując podstawowe operatory logiczne, wykonaj zapytanie, które wyświetli:
+
+    kody pocztowe miejscowości należących do trójmiasta (tzn. Gdańska, Sopotu i Gdyni).
+    pełne adresy miejscowości Gdańsk, których ulica to Niezależna lub Świętego Mikołaja.
+    nazwy imiona, nazwiska i numery pesel, osób, które nie mają na imię Stefan, Filip, Borys.
+
+
+Zadanie 7. Wykorzystując operator sprawdzający przynależność do zbioru, wykonaj zapytanie, które wyświetli:
+
+    nazwy imiona, nazwiska i numery pesel, osób, które mają na imię Przemysław, Borys, Stefan, Filip, Jan, Kordian, Krystyna, Aneta, Maja i Natalia.
+    kody pocztowe miejscowości należących do trójmiasta (tzn. Gdańska, Sopotu i Gdyni).
+    kody pocztowe miejscowości, które nie należą do trójmiasta (tzn. nie należą do Gdańska, Sopotu i Gdyni).
+
+
+Zadanie 8. Wykorzystując operator umożliwiający sprawdzenie wzorca, wykonaj zapytanie, które wyświetli:
+
+    imiona i nazwiska osób, których nazwisko zaczyna się na D i kończy na ki.
+    imiona i nazwiska osób, których druga litera imienia to a lub o.
+    imiona i nazwiska osób, których imię nie kończy się na a i nazwisko zawiera trzecią literę b lub o.
+
+
+Zadanie 9. Wykorzystując operator umożliwiający sprawdzenie przedziałów, wykonaj zapytanie, które wyświetli:
+
+    imiona, nazwiska i daty urodzenia osób, którzy urodzili się między 1970 a 1990 rokiem.
+    nazwy stanowisk, których pensje są pomiędzy od 3000 do 4000 i od 5000 do 6000.
+    adresy, których numer mieszkania jest dwucyfrowy.
+
+
+Zadanie 10. Wykorzystując operator sprawdzania braku wartości, wykonaj zapytanie, które wyświetli:
+
+    adresy, które posiadają numer mieszkania (posiadają wartość pola apartment_number).
+    imiona, nazwiska osób, które są bezrobotne (nie posiadają wartości pola job_position_id).
+
+
+Zadanie 11. Wykorzystując operacje arytmetyczne (możliwe, że potrzebne będą funkcje SQL do obsługi braku wartości), wykonaj zapytanie, które wyświetli:
+
+    nazwy stanowisk oraz nowe pensje, zwiększoną o 50% (kolumna z nową pensją, powinna być wyświetlona pod nazwą new_salary).
+    nazwy stanowisk oraz sumę pensji i dodatek do pensji (kolumna z sumą pensji i dodatku do pensji, powinna być wyświetlona pod nazwą paycheck).
+
+
+Zadanie 12. Wykorzystując funkcje SQL związanych datami (możliwe, że potrzebne operacje arytmetyczne), wykonaj zapytanie, które wyświetli:
+
+    imię, nazwisko i wiek osób (kolumna z wiek, powinna być wyświetlona pod nazwą age).
+    imię, nazwisko i liczba dni jaka minęła od daty urodzenia osoby (kolumna z liczbą dni, powinna być wyświetlona pod nazwą numbers_days).
+
+
+Zadanie 13. Wykorzystując funkcje SQL związanych napisami, wykonaj zapytanie, które wyświetli:
+
+    nazwy stanowisk oraz ich pensje w taki sposób, aby miały końcówkę zł.
+    imię, nazwisko osób w taki sposób, aby pierwsza litera imienia i nazwiska była duża, a pozostałe małe (niezależnie od tego jak jest wpisana w bazie danych).
+    imię, nazwisko i numer pesel w taki sposób, że tylko pierwsze dwa i ostatnie dwa znaki numeru pesel zostaną wyświetlone, reszta zastąpiona zostanie znakami 'x' (przykładowo numer pesel '95011864011', powinien być wyświetlony jako '95xxxxxxx11').
+
+
+Zadanie 14. Wykonaj zapytanie, które zmieni:
+
+    imię i nazwisko osoby o identyfikatorze 10 na Jan Kowalski.
+    brak stanowiska wszystkim osobom, które urodziły się przez 1970 roku (pole job_position_id powinno przyjąć wartość NULL, dla tych osób).
+    dodatek do pensji stanowiskom, które zarabiają mniej niż 4000 zł, na taki by był o 100 zł większy (jeżeli jest pusty powinien wynosić 100 zł).
+
+
+Zadanie 15. Wykonaj zapytanie, które usunie:
+
+    osobę której identyfikator to 15.
+    osoby, które nie są nigdzie zatrudnione (gdzie pole job_position_id jest puste).
+    osoby, które mają więcej niż 60 lat.
+
+
+Zadanie 16. Wykonaj zapytanie, które umieści:
+
+    w encji job_position, nowe stanowisko (np. 'Programista' z pensją 10000).
+    w encji address, nowe dane (możesz dodać swój adres).
+    w encji person, nowe dane (dodać swoje dane osobowe).
