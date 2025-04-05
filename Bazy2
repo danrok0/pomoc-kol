@@ -1,0 +1,167 @@
+Zadanie 1:
+
+-- Wyświetlanie wszystkich adresów
+SELECT * FROM address;
+
+-- Wyświetlanie nazw stanowisk, pensji i dodatku do pensji
+SELECT title, salary, extra_payment FROM job_position;
+
+-- Wyświetlanie imion, nazwisk, numerów pesel, daty urodzenia i płci
+SELECT first_name, last_name, pesel, birth_date, gender FROM person;
+
+Zadanie 2:
+
+-- Wyświetlanie nazw stanowisk posortowanych rosnąco
+SELECT title FROM job_position ORDER BY title;
+
+-- Wyświetlanie imion i nazwisk posortowanych rosnąco wg nazwiska, a następnie imienia
+SELECT first_name, last_name FROM person ORDER BY last_name, first_name;
+
+-- Wyświetlanie nazw stanowisk posortowanych malejąco wg pensji, jeżeli pensja jest taka sama to posortowane rosnąco wg nazwy stanowiska
+SELECT title FROM job_position ORDER BY salary DESC, title ASC;
+
+Zadanie 3:
+
+-- Wyświetlanie imion osób bez powtórzeń
+SELECT DISTINCT first_name FROM person;
+
+-- Wyświetlanie miejscowości i ulic adresów bez powtórzeń
+SELECT DISTINCT locality, street FROM address;
+
+-- Wyświetlanie miejscowości i ulic adresów bez powtórzeń, posortowane malejąco wg miejscowości, a jeśli miejscowość jest taka sama, to malejąco wg ulicy
+SELECT DISTINCT locality, street FROM address ORDER BY locality DESC, street DESC;
+
+Zadanie 4:
+
+-- Wyświetlanie nazw pierwszych trzech stanowisk o najmniejszych pensjach
+SELECT title FROM job_position ORDER BY salary ASC LIMIT 3;
+
+-- Wyświetlanie imienia, nazwiska i numeru pesel najstarszej osoby
+SELECT first_name, last_name, pesel FROM person ORDER BY birth_date ASC LIMIT 1;
+
+-- Wyświetlanie pierwszych pięciu adresów w Gdańsku z największym numerem mieszkania
+SELECT * FROM address WHERE locality = 'Gdańsk' ORDER BY apartment_number DESC LIMIT 5;
+
+Zadanie 5:
+
+-- Wyświetlanie numerów pesel wszystkich mężczyzn
+SELECT pesel FROM person WHERE gender = 'm';
+
+-- Wyświetlanie imion, nazwisk i numerów pesel osób o imieniu Stefan
+SELECT first_name, last_name, pesel FROM person WHERE first_name = 'Stefan';
+
+-- Wyświetlanie nazw stanowisk i pensji dla stanowisk, które zarabiają więcej niż 3500 zł
+SELECT title, salary FROM job_position WHERE salary > 3500;
+
+Zadanie 6:
+
+-- Wyświetlanie kodów pocztowych miejscowości należących do trójmiasta
+SELECT postal_code FROM address WHERE locality IN ('Gdańsk', 'Sopot', 'Gdynia');
+
+-- Wyświetlanie pełnych adresów miejscowości Gdańsk, których ulica to Niezależna lub Świętego Mikołaja
+SELECT * FROM address WHERE locality = 'Gdańsk' AND (street = 'Niezależna' OR street = 'Świętego Mikołaja');
+
+-- Wyświetlanie imion, nazwisk i numerów pesel osób, które nie mają na imię Stefan, Filip, Borys
+SELECT first_name, last_name, pesel FROM person WHERE first_name NOT IN ('Stefan', 'Filip', 'Borys');
+
+Zadanie 7:
+
+-- Wyświetlanie imion, nazwisk i numerów pesel osób, które mają na imię Przemysław, Borys, Stefan, Filip, Jan, Kordian, Krystyna, Aneta, Maja i Natalia
+SELECT first_name, last_name, pesel FROM person WHERE first_name IN ('Przemysław', 'Borys', 'Stefan', 'Filip', 'Jan', 'Kordian', 'Krystyna', 'Aneta', 'Maja', 'Natalia');
+
+-- Wyświetlanie kodów pocztowych miejscowości należących do trójmiasta
+SELECT postal_code FROM address WHERE locality IN ('Gdańsk', 'Sopot', 'Gdynia');
+
+-- Wyświetlanie kodów pocztowych miejscowości, które nie należą do trójmiasta
+SELECT postal_code FROM address WHERE locality NOT IN ('Gdańsk', 'Sopot', 'Gdynia');
+
+Zadanie 8:
+
+-- Wyświetlanie imion i nazwisk osób, których nazwisko zaczyna się na D i kończy na ki
+SELECT first_name, last_name FROM person WHERE last_name LIKE 'D%ki';
+
+-- Wyświetlanie imion i nazwisk osób, których druga litera imienia to a lub o
+SELECT first_name, last_name FROM person WHERE first_name LIKE '_a%' OR first_name LIKE '_o%';
+
+-- Wyświetlanie imion i nazwisk osób, których imię nie kończy się na a i nazwisko zawiera trzecią literę b lub o
+SELECT first_name, last_name FROM person WHERE first_name NOT LIKE '%a' AND (last_name LIKE '__b%' OR last_name LIKE '__o%');
+
+Zadanie 9:
+
+-- Wyświetlanie imion, nazwisk i dat urodzenia osób, którzy urodzili się między 1970 a 1990 rokiem
+SELECT first_name, last_name, birth_date FROM person WHERE birth_date BETWEEN '1970-01-01' AND '1990-12-31';
+
+-- Wyświetlanie nazw stanowisk, których pensje są pomiędzy 3000 a 4000 oraz pomiędzy 5000 a 6000
+SELECT title FROM job_position WHERE salary BETWEEN 3000 AND 4000 OR salary BETWEEN 5000 AND 6000;
+
+-- Wyświetlanie adresów, których numer mieszkania jest dwucyfrowy
+SELECT * FROM address WHERE apartment_number BETWEEN 10 AND 99;
+
+Zadanie 10:
+
+-- Wyświetlanie adresów, które posiadają numer mieszkania
+SELECT * FROM address WHERE apartment_number IS NOT NULL;
+
+-- Wyświetlanie imion, nazwisk osób, które są bezrobotne (nie posiadają wartości pola job_position_id)
+SELECT first_name, last_name FROM person WHERE job_position_id IS NULL;
+
+Zadanie 11:
+
+-- Wyświetlanie nazw stanowisk oraz nowych pensji (zwiększonych o 50%)
+SELECT title, salary * 1.5 AS new_salary FROM job_position;
+
+-- Wyświetlanie nazw stanowisk oraz sumy pensji i dodatku do pensji
+SELECT title, salary + COALESCE(extra_payment, 0) AS paycheck FROM job_position;
+
+Zadanie 12:
+
+-- Wyświetlanie imion, nazwisk i wieku osób
+SELECT first_name, last_name, FLOOR(DATEDIFF(CURRENT_DATE, birth_date) / 365) AS age FROM person;
+
+-- Wyświetlanie imion, nazwisk i liczby dni od daty urodzenia
+SELECT first_name, last_name, DATEDIFF(CURRENT_DATE, birth_date) AS numbers_days FROM person;
+
+Zadanie 13:
+
+-- Wyświetlanie nazw stanowisk oraz ich pensji z końcówką "zł"
+SELECT title, CONCAT(salary, ' zł') AS salary_with_zl FROM job_position;
+
+-- Wyświetlanie imion, nazwisk osób, gdzie pierwsza litera imienia i nazwiska jest duża, a pozostałe małe
+SELECT INITCAP(first_name) AS first_name, INITCAP(last_name) AS last_name FROM person;
+
+-- Wyświetlanie imienia, nazwiska i numeru pesel z pierwszymi dwoma i ostatnimi dwoma znakami peselu, reszta to 'x'
+SELECT first_name, last_name, CONCAT(SUBSTRING(pesel, 1, 2), 'xxxxxxx', SUBSTRING(pesel, 10, 2)) AS masked_pesel FROM person;
+
+Zadanie 14:
+
+-- Zmiana imienia i nazwiska osoby o identyfikatorze 10 na Jan Kowalski
+UPDATE person SET first_name = 'Jan', last_name = 'Kowalski' WHERE id = 10;
+
+-- Brak stanowiska wszystkim osobom, które urodziły się przed 1970 rokiem
+UPDATE person SET job_position_id = NULL WHERE birth_date < '1970-01-01';
+
+-- Dodanie 100 zł do dodatku do pensji stanowiskom, które zarabiają mniej niż 4000 zł
+UPDATE job_position SET extra_payment = COALESCE(extra_payment, 0) + 100 WHERE salary < 4000;
+
+Zadanie 15:
+
+-- Usunięcie osoby o identyfikatorze 15
+DELETE FROM person WHERE id = 15;
+
+-- Usunięcie osób, które nie są nigdzie zatrudnione
+DELETE FROM person WHERE job_position_id IS NULL;
+
+-- Usunięcie osób, które mają więcej niż 60 lat
+DELETE FROM person WHERE birth_date < CURRENT_DATE - INTERVAL '60 years';
+
+Zadanie 16:
+
+-- Dodanie nowego stanowiska
+INSERT INTO job_position (title, salary) VALUES ('Programista', 10000);
+
+-- Dodanie nowych danych do adresu
+INSERT INTO address (locality, street, house_number, apartment_number, postal_code) VALUES ('Miasto', 'Ulica', 1, 101, '12-345');
+
+-- Dodanie nowych danych do osoby
+INSERT INTO person (address_id, job_position_id, first_name, last_name, gender, birth_date, pesel) VALUES (1, 1, 'Jan', 'Nowak', 'm', '1990-01-01', '95011864011');
+
