@@ -1,0 +1,407 @@
+# Dokumentacja Schematu Bazy Danych Kasyna
+
+Ten dokument przedstawia przeglÄd schematu bazy danych dla platformy kasyna online. Schemat zostaĹ zaprojektowany w celu obsĹugi zarzÄdzania uĹźytkownikami, uwierzytelniania, operacji gier, transakcji finansowych oraz funkcji odpowiedzialnego hazardu.
+
+## Spis TreĹci
+
+1. [Typy Wyliczeniowe](#typy-wyliczeniowe)
+2. [Tabele ZwiÄzane z UĹźytkownikami](#tabele-zwiÄzane-z-uĹźytkownikami)
+3. [Tabele Uwierzytelniania i BezpieczeĹstwa](#tabele-uwierzytelniania-i-bezpieczeĹstwa)
+4. [Tabele Finansowe](#tabele-finansowe)
+5. [Tabele ZwiÄzane z Grami](#tabele-zwiÄzane-z-grami)
+6. [Tabele Promocyjne](#tabele-promocyjne)
+7. [Tabele Ĺledzenia i Monitorowania](#tabele-Ĺledzenia-i-monitorowania)
+
+## Typy Wyliczeniowe
+
+Schemat wykorzystuje kilka typĂłw wyliczeniowych PostgreSQL (enum) do ograniczenia okreĹlonych wartoĹci pĂłl:
+
+| Nazwa Enum | WartoĹci |
+|-----------|--------|
+| `user_role` | `user` (uĹźytkownik), `vip` (VIP), `admin` (administrator), `moderator` (moderator) |
+| `account_status` | `active` (aktywne), `suspended` (zawieszone), `banned` (zablokowane), `pending_verification` (oczekujÄce na weryfikacjÄ) |
+| `game_type` | `slot` (automaty), `poker` (poker), `blackjack` (blackjack), `roulette` (ruletka), `baccarat` (bakarat), `dice` (koĹci), `lottery` (loteria) |
+| `transaction_type` | `deposit` (wpĹata), `withdrawal` (wypĹata), `bet` (zakĹad), `win` (wygrana), `bonus` (bonus), `refund` (zwrot) |
+| `currency` | `USD` (dolar amerykaĹski), `EUR` (euro), `GBP` (funt brytyjski), `PLN` (zĹoty polski), `BTC` (bitcoin), `ETH` (ethereum) |
+| `verification_status` | `pending` (oczekujÄce), `approved` (zatwierdzone), `rejected` (odrzucone) |
+| `promotion_type` | `welcome` (powitalne), `deposit` (depozytowe), `cashback` (zwrot gotĂłwki), `free_spins` (darmowe spiny), `loyalty` (lojalnoĹciowe) |
+
+## Tabele ZwiÄzane z UĹźytkownikami
+
+### UĹźytkownicy (`users`)
+
+GĹĂłwna tabela zawierajÄca podstawowe informacje o uĹźytkownikach.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny, generowany automatycznie |
+| `email` | `text` | Adres e-mail uĹźytkownika (unikalny) |
+| `passwordHash` | `text` | Zaszyfrowane hasĹo |
+| `username` | `text` | Nazwa uĹźytkownika (unikalna) |
+| `firstName` | `text` | ImiÄ uĹźytkownika |
+| `lastName` | `text` | Nazwisko uĹźytkownika |
+| `dateOfBirth` | `date` | Data urodzenia uĹźytkownika |
+| `phoneNumber` | `text` | Numer telefonu uĹźytkownika |
+| `role` | `user_role` | Rola uĹźytkownika (domyĹlnie: 'user') |
+| `status` | `account_status` | Status konta (domyĹlnie: 'pending_verification') |
+| `isEmailVerified` | `boolean` | Czy e-mail zostaĹ zweryfikowany (domyĹlnie: false) |
+| `createdAt` | `timestamp` | Kiedy konto zostaĹo utworzone |
+| `updatedAt` | `timestamp` | Kiedy konto zostaĹo ostatnio zaktualizowane |
+| `lastLoginAt` | `timestamp` | Kiedy uĹźytkownik ostatnio siÄ zalogowaĹ |
+
+### Profile UĹźytkownikĂłw (`user_profiles`)
+
+Rozszerzone informacje o uĹźytkownikach.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `avatarUrl` | `text` | URL do awatara uĹźytkownika |
+| `address` | `text` | Adres uĹźytkownika |
+| `city` | `text` | Miasto uĹźytkownika |
+| `country` | `text` | Kraj uĹźytkownika |
+| `postalCode` | `text` | Kod pocztowy uĹźytkownika |
+| `preferredLanguage` | `text` | Preferowany jÄzyk uĹźytkownika (domyĹlnie: 'en') |
+| `timeZone` | `text` | Strefa czasowa uĹźytkownika |
+| `marketingConsent` | `boolean` | Czy uĹźytkownik wyraĹźa zgodÄ na marketing (domyĹlnie: false) |
+| `updatedAt` | `timestamp` | Kiedy profil zostaĹ ostatnio zaktualizowany |
+
+### Weryfikacja UĹźytkownika (`user_verifications`)
+
+Dane weryfikacji KYC (Know Your Customer).
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `documentType` | `text` | Typ dokumentu toĹźsamoĹci (paszport, dowĂłd osobisty itp.) |
+| `documentNumber` | `text` | Numer dokumentu toĹźsamoĹci |
+| `documentImageFront` | `text` | URL do obrazu przodu dokumentu toĹźsamoĹci |
+| `documentImageBack` | `text` | URL do obrazu tyĹu dokumentu toĹźsamoĹci |
+| `selfieImage` | `text` | URL do zdjÄcia selfie weryfikacyjnego |
+| `status` | `verification_status` | Status weryfikacji (domyĹlnie: 'pending') |
+| `reviewerNotes` | `text` | Notatki od weryfikatora |
+| `reviewedBy` | `uuid` | Referencja do administratora, ktĂłry zweryfikowaĹ dokument |
+| `reviewedAt` | `timestamp` | Kiedy weryfikacja zostaĹa przeprowadzona |
+| `createdAt` | `timestamp` | Kiedy weryfikacja zostaĹa zĹoĹźona |
+| `updatedAt` | `timestamp` | Kiedy weryfikacja zostaĹa ostatnio zaktualizowana |
+
+## Tabele Uwierzytelniania i BezpieczeĹstwa
+
+### Weryfikacje E-mail (`email_verifications`)
+
+Ĺledzi tokeny weryfikacji e-mail.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `token` | `text` | Token weryfikacyjny |
+| `expiresAt` | `timestamp` | Kiedy token wygasa |
+| `isUsed` | `boolean` | Czy token zostaĹ wykorzystany (domyĹlnie: false) |
+| `createdAt` | `timestamp` | Kiedy weryfikacja zostaĹa utworzona |
+
+### Sesje UĹźytkownikĂłw (`user_sessions`)
+
+ZarzÄdza aktywnymi sesjami uĹźytkownikĂłw.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `token` | `text` | Token sesji (unikalny) |
+| `ipAddress` | `text` | Adres IP sesji |
+| `userAgent` | `text` | User agent przeglÄdarki/urzÄdzenia |
+| `expiresAt` | `timestamp` | Kiedy sesja wygasa |
+| `isActive` | `boolean` | Czy sesja jest aktywna (domyĹlnie: true) |
+| `createdAt` | `timestamp` | Kiedy sesja zostaĹa utworzona |
+| `lastActivityAt` | `timestamp` | Kiedy wystÄpiĹa ostatnia aktywnoĹÄ w tej sesji |
+
+### Resetowanie HaseĹ (`password_resets`)
+
+Ĺledzi tokeny resetowania haseĹ.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `token` | `text` | Token resetowania |
+| `expiresAt` | `timestamp` | Kiedy token wygasa |
+| `isUsed` | `boolean` | Czy token zostaĹ wykorzystany (domyĹlnie: false) |
+| `createdAt` | `timestamp` | Kiedy proĹba o reset zostaĹa utworzona |
+
+## Tabele Finansowe
+
+### Portfele (`wallets`)
+
+Informacje o saldach uĹźytkownikĂłw.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `currency` | `currency` | Waluta portfela |
+| `balance` | `decimal` | DostÄpne saldo (domyĹlnie: 0) |
+| `bonusBalance` | `decimal` | Saldo ĹrodkĂłw bonusowych (domyĹlnie: 0) |
+| `lockedAmount` | `decimal` | Kwota zablokowana w oczekujÄcych operacjach (domyĹlnie: 0) |
+| `createdAt` | `timestamp` | Kiedy portfel zostaĹ utworzony |
+| `updatedAt` | `timestamp` | Kiedy portfel zostaĹ ostatnio zaktualizowany |
+
+### Transakcje (`transactions`)
+
+Zapisy operacji finansowych.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `walletId` | `uuid` | Referencja do `wallets.id` |
+| `type` | `transaction_type` | Typ transakcji |
+| `amount` | `decimal` | Kwota transakcji |
+| `currency` | `currency` | Waluta transakcji |
+| `status` | `text` | Status transakcji (pending, completed, failed, canceled) |
+| `referenceId` | `text` | ZewnÄtrzny identyfikator referencyjny |
+| `description` | `text` | Opis transakcji |
+| `createdAt` | `timestamp` | Kiedy transakcja zostaĹa utworzona |
+| `updatedAt` | `timestamp` | Kiedy transakcja zostaĹa ostatnio zaktualizowana |
+
+### Metody PĹatnoĹci (`payment_methods`)
+
+Metody pĹatnoĹci uĹźytkownikĂłw.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `type` | `text` | Typ metody pĹatnoĹci (credit_card, bank_transfer, itp.) |
+| `provider` | `text` | Dostawca pĹatnoĹci (visa, mastercard, paypal, itp.) |
+| `accountNumber` | `text` | Zamaskowany numer konta |
+| `expiryDate` | `text` | Data waĹźnoĹci dla kart |
+| `isDefault` | `boolean` | Czy jest to domyĹlna metoda pĹatnoĹci (domyĹlnie: false) |
+| `metadata` | `jsonb` | Dodatkowe dane specyficzne dla metody pĹatnoĹci |
+| `isVerified` | `boolean` | Czy metoda pĹatnoĹci jest zweryfikowana (domyĹlnie: false) |
+| `createdAt` | `timestamp` | Kiedy metoda pĹatnoĹci zostaĹa dodana |
+| `updatedAt` | `timestamp` | Kiedy metoda pĹatnoĹci zostaĹa ostatnio zaktualizowana |
+
+## Tabele ZwiÄzane z Grami
+
+### Gry (`games`)
+
+DostÄpne gry w kasynie.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `name` | `text` | Nazwa gry |
+| `type` | `game_type` | Typ gry |
+| `provider` | `text` | Dostawca/producent gry |
+| `description` | `text` | Opis gry |
+| `thumbnailUrl` | `text` | URL do miniaturki gry |
+| `isActive` | `boolean` | Czy gra jest aktywna (domyĹlnie: true) |
+| `rtp` | `decimal` | Procent zwrotu dla gracza (Return To Player) |
+| `volatility` | `text` | ZmiennoĹÄ gry (niska, Ĺrednia, wysoka) |
+| `minBet` | `decimal` | Minimalna kwota zakĹadu |
+| `maxBet` | `decimal` | Maksymalna kwota zakĹadu |
+| `popularity` | `integer` | Ocena popularnoĹci gry (domyĹlnie: 0) |
+| `createdAt` | `timestamp` | Kiedy gra zostaĹa dodana |
+| `updatedAt` | `timestamp` | Kiedy gra zostaĹa ostatnio zaktualizowana |
+
+### Sesje Gier (`game_sessions`)
+
+Ĺledzi sesje gier graczy.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `gameId` | `uuid` | Referencja do `games.id` |
+| `startedAt` | `timestamp` | Kiedy sesja siÄ rozpoczÄĹa |
+| `endedAt` | `timestamp` | Kiedy sesja siÄ zakoĹczyĹa |
+| `initialBalance` | `decimal` | Saldo uĹźytkownika na poczÄtku sesji |
+| `finalBalance` | `decimal` | Saldo uĹźytkownika na koĹcu sesji |
+| `totalBets` | `integer` | Liczba zakĹadĂłw w sesji (domyĹlnie: 0) |
+| `totalWins` | `integer` | Liczba wygranych w sesji (domyĹlnie: 0) |
+| `ipAddress` | `text` | Adres IP podczas sesji |
+| `deviceInfo` | `text` | Informacje o urzÄdzeniu |
+
+### ZakĹady (`bets`)
+
+Indywidualne zapisy zakĹadĂłw.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `gameId` | `uuid` | Referencja do `games.id` |
+| `gameSessionId` | `uuid` | Referencja do `game_sessions.id` |
+| `amount` | `decimal` | Kwota zakĹadu |
+| `currency` | `currency` | Waluta zakĹadu |
+| `multiplier` | `decimal` | MnoĹźnik zakĹadu |
+| `potentialWin` | `decimal` | Potencjalna wygrana |
+| `outcome` | `text` | Wynik zakĹadu (win, loss, draw, canceled) |
+| `winAmount` | `decimal` | Wygrana kwota |
+| `gameData` | `jsonb` | SzczegĂłĹy zakĹadu specyficzne dla gry |
+| `transactionId` | `uuid` | Referencja do `transactions.id` |
+| `createdAt` | `timestamp` | Kiedy zakĹad zostaĹ zĹoĹźony |
+| `settledAt` | `timestamp` | Kiedy zakĹad zostaĹ rozliczony |
+
+### Kategorie Gier (`game_categories`)
+
+Kategorie do organizowania gier.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `name` | `text` | Nazwa kategorii (unikalna) |
+| `description` | `text` | Opis kategorii |
+| `displayOrder` | `integer` | KolejnoĹÄ wyĹwietlania (domyĹlnie: 0) |
+| `isActive` | `boolean` | Czy kategoria jest aktywna (domyĹlnie: true) |
+| `createdAt` | `timestamp` | Kiedy kategoria zostaĹa utworzona |
+| `updatedAt` | `timestamp` | Kiedy kategoria zostaĹa ostatnio zaktualizowana |
+
+### Kategoryzacja Gier (`game_categorization`)
+
+ĹÄczy gry z kategoriami (relacja wiele-do-wielu).
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `serial` | Klucz gĹĂłwny |
+| `gameId` | `uuid` | Referencja do `games.id` |
+| `categoryId` | `uuid` | Referencja do `game_categories.id` |
+| `createdAt` | `timestamp` | Kiedy rekord zostaĹ utworzony |
+
+### Jackpoty (`jackpots`)
+
+Pule jackpotĂłw.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `name` | `text` | Nazwa jackpotu |
+| `type` | `text` | Typ jackpotu (progresywny, staĹy, sieciowy) |
+| `currentAmount` | `decimal` | Aktualna kwota jackpotu |
+| `seedAmount` | `decimal` | PoczÄtkowa kwota po wygranej |
+| `incrementRate` | `decimal` | Procent zakĹadĂłw dodawany do jackpotu |
+| `lastWon` | `timestamp` | Kiedy jackpot zostaĹ ostatnio wygrany |
+| `lastWinAmount` | `decimal` | Ostatnia wygrana kwota |
+| `lastWinnerId` | `uuid` | Referencja do `users.id` ostatniego zwyciÄzcy |
+| `isActive` | `boolean` | Czy jackpot jest aktywny (domyĹlnie: true) |
+| `createdAt` | `timestamp` | Kiedy jackpot zostaĹ utworzony |
+| `updatedAt` | `timestamp` | Kiedy jackpot zostaĹ ostatnio zaktualizowany |
+
+### Jackpoty w Grach (`game_jackpots`)
+
+ĹÄczy gry z jackpotami (relacja wiele-do-wielu).
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `serial` | Klucz gĹĂłwny |
+| `gameId` | `uuid` | Referencja do `games.id` |
+| `jackpotId` | `uuid` | Referencja do `jackpots.id` |
+| `contributionRate` | `decimal` | Procent zakĹadĂłw, ktĂłre przyczyniajÄ siÄ do tego jackpotu |
+| `createdAt` | `timestamp` | Kiedy rekord zostaĹ utworzony |
+
+## Tabele Promocyjne
+
+### Promocje (`promotions`)
+
+Oferty promocyjne.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `name` | `text` | Nazwa promocji |
+| `code` | `text` | Kod promocyjny (unikalny) |
+| `type` | `promotion_type` | Typ promocji |
+| `description` | `text` | Opis promocji |
+| `value` | `decimal` | WartoĹÄ promocji (kwota lub procent) |
+| `isPercentage` | `boolean` | Czy wartoĹÄ jest procentem (domyĹlnie: false) |
+| `minDeposit` | `decimal` | Minimalny wymagany depozyt |
+| `maxBonus` | `decimal` | Maksymalna kwota bonusu |
+| `wageringRequirement` | `decimal` | MnoĹźnik wymogu obrotu |
+| `validFrom` | `timestamp` | Data i czas rozpoczÄcia |
+| `validTo` | `timestamp` | Data i czas zakoĹczenia |
+| `isActive` | `boolean` | Czy promocja jest aktywna (domyĹlnie: true) |
+| `allowedGames` | `jsonb` | Gry kwalifikujÄce siÄ do promocji |
+| `createdAt` | `timestamp` | Kiedy promocja zostaĹa utworzona |
+| `updatedAt` | `timestamp` | Kiedy promocja zostaĹa ostatnio zaktualizowana |
+
+### Bonusy UĹźytkownikĂłw (`user_bonuses`)
+
+Bonusy przyznane uĹźytkownikom.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `promotionId` | `uuid` | Referencja do `promotions.id` |
+| `amount` | `decimal` | Kwota bonusu |
+| `remainingWagering` | `decimal` | PozostaĹy wymĂłg obrotu |
+| `isActive` | `boolean` | Czy bonus jest aktywny (domyĹlnie: true) |
+| `expiresAt` | `timestamp` | Kiedy bonus wygasa |
+| `createdAt` | `timestamp` | Kiedy bonus zostaĹ utworzony |
+| `updatedAt` | `timestamp` | Kiedy bonus zostaĹ ostatnio zaktualizowany |
+
+## Tabele Ĺledzenia i Monitorowania
+
+### Dziennik AktywnoĹci UĹźytkownikĂłw (`user_activity_log`)
+
+Ĺledzi aktywnoĹci uĹźytkownikĂłw.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `action` | `text` | Wykonana akcja (logowanie, wylogowanie, wpĹata, itp.) |
+| `ipAddress` | `text` | Adres IP |
+| `deviceInfo` | `text` | Informacje o urzÄdzeniu |
+| `details` | `jsonb` | Dodatkowe szczegĂłĹy akcji |
+| `createdAt` | `timestamp` | Kiedy aktywnoĹÄ wystÄpiĹa |
+
+### Limity Odpowiedzialnej Gry (`responsible_gaming_limits`)
+
+Limity odpowiedzialnej gry zdefiniowane przez uĹźytkownika.
+
+| Kolumna | Typ | Opis |
+|--------|------|-------------|
+| `id` | `uuid` | Klucz gĹĂłwny |
+| `userId` | `uuid` | Referencja do `users.id` |
+| `depositLimit` | `jsonb` | Limity wpĹat (dzienne, tygodniowe, miesiÄczne) |
+| `betLimit` | `jsonb` | Limity zakĹadĂłw |
+| `lossLimit` | `jsonb` | Limity przegranych |
+| `sessionTimeLimit` | `integer` | Maksymalny czas sesji w minutach |
+| `cooldownPeriod` | `jsonb` | Okres tymczasowej przerwy |
+| `selfExclusion` | `jsonb` | Okres samowykluczenia |
+| `nextReviewDate` | `timestamp` | Kiedy limity powinny zostaÄ przejrzane |
+| `createdAt` | `timestamp` | Kiedy limity zostaĹy utworzone |
+| `updatedAt` | `timestamp` | Kiedy limity zostaĹy ostatnio zaktualizowane |
+
+## Relacje MiÄdzy Encjami
+
+Schemat implementuje nastÄpujÄce kluczowe relacje:
+
+1. Jeden uĹźytkownik moĹźe posiadaÄ:
+   - Jeden profil uĹźytkownika
+   - Wiele prĂłb weryfikacji
+   - Wiele sesji
+   - Wiele prĂłĹb o resetowanie hasĹa
+   - Wiele portfeli (jeden na walutÄ)
+   - Wiele metod pĹatnoĹci
+   - Wiele sesji gier
+   - Wiele zakĹadĂłw
+   - Wiele bonusĂłw
+   - Jeden zestaw limitĂłw odpowiedzialnej gry
+
+2. Gry mogÄ posiadaÄ:
+   - Wiele kategorii (relacja wiele-do-wielu)
+   - Wiele jackpotĂłw (relacja wiele-do-wielu)
+   - Wiele sesji gier
+   - Wiele zakĹadĂłw
+
+3. Ĺledzenie finansowe:
+   - Transakcje sÄ powiÄzane z uĹźytkownikami i portfelami
+   - ZakĹady sÄ powiÄzane z transakcjami
+   - WpĹaty i wypĹaty sÄ powiÄzane z metodami pĹatnoĹci
+
+Ten kompleksowy schemat stanowi solidnÄ podstawÄ do budowy w peĹni funkcjonalnej platformy kasyna online z odpowiednim zarzÄdzaniem uĹźytkownikami, Ĺledzeniem finansowym i funkcjami odpowiedzialnej gry.
