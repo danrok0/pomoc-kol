@@ -1,0 +1,75 @@
+package kalkulator;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class KalkulatorTest {
+
+    @Test
+    public void testDodaj() {
+        Kalkulator calc = new Kalkulator(10, 5);
+        calc.dodaj();
+        assertEquals(15.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testDodajUjemne() {
+        Kalkulator calc = new Kalkulator(-5, -3);
+        calc.dodaj();
+        assertEquals(-8.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testOdejmij() {
+        Kalkulator calc = new Kalkulator(10, 5);
+        calc.odejmij();
+        assertEquals(5.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testOdejmijWynikUjemny() {
+        Kalkulator calc = new Kalkulator(5, 10);
+        calc.odejmij();
+        assertEquals(-5.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testPomnoz() {
+        Kalkulator calc = new Kalkulator(10, 5);
+        calc.pomnoz();
+        assertEquals(50.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testPomnozPrzezZero() {
+        Kalkulator calc = new Kalkulator(10, 0);
+        calc.pomnoz();
+        assertEquals(0.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testPodziel() {
+        Kalkulator calc = new Kalkulator(10, 5);
+        calc.podziel();
+        assertEquals(2.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testPodzielPrzezZero() {
+        Kalkulator calc = new Kalkulator(10, 0);
+        assertThrows(ArithmeticException.class, calc::podziel);
+    }
+
+    @Test
+    public void testModulo() {
+        Kalkulator calc = new Kalkulator(10, 5);
+        calc.modulo();
+        assertEquals(0.0, calc.getWynik(), 0.001);
+    }
+
+    @Test
+    public void testPoczatkowyWynik() {
+        Kalkulator calc = new Kalkulator(5, 3);
+        assertEquals(0.0, calc.getWynik(), 0.001);
+    }
+}
