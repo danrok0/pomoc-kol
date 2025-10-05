@@ -1,0 +1,50 @@
+package kalkulator;
+
+public class Kalkulator {
+    private double x;
+    private double y;
+    private double wynik;
+
+    public Kalkulator(double x, double y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public double getWynik() {
+        return wynik;
+    }
+
+    public void setLiczby(double x, double y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public void dodaj() {
+        wynik = x + y;
+    }
+
+    public void odejmij() {
+        wynik = x - y;
+    }
+
+    public void pomnoz() {
+        wynik = x * y;
+    }
+
+    public void podziel() {
+        if (y != 0) {
+            wynik = x / y;
+        } else {
+            throw new ArithmeticException("Nie można dzielić przez zero!");
+        }
+    }
+
+    public void modulo() {
+        wynik = x % y;
+    }
+
+    @Override
+    public String toString() {
+        return "Wynik: " + wynik;
+    }
+}
