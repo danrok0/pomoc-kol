@@ -1,0 +1,103 @@
+//zad 1
+
+if [ $# -eq 0 ]; then
+    echo "Error: No arguments provided" >&2
+    exit 1
+fi
+
+sum=0
+for arg in "$@"; do
+    if ! [[ "$arg" =~ ^-?[0-9]+$ ]]; then
+        echo "Error: '$arg' is not a valid integer" >&2
+        exit 1
+    fi
+    sum=$((sum + arg))
+done
+
+echo "$sum"
+exit 0
+
+//zad 2
+
+if [ $# -ne 1 ]; then
+    echo "Error: Exactly one argument required" >&2
+    exit 1
+fi
+
+num=$1
+
+if ! [[ "$num" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$num' is not a non-negative integer" >&2
+    exit 1
+fi
+
+if [ "$num" -eq 0 ]; then
+    echo "0"
+    exit 0
+fi
+
+binary=""
+while [ "$num" -gt 0 ]; do
+    rem=$((num % 2))
+    binary="$rem$binary"
+    num=$((num / 2))
+done
+
+echo "$binary"
+exit 0
+
+//zad 3
+
+declare -A freq
+
+for item in "$@"; do
+    ((freq["$item"]++))
+done
+
+for key in "${!freq[@]}"; do
+    echo "$key: ${freq[$key]}"
+done | sort
+
+
+// zad 4
+
+text="$1"
+text="${text,,}"
+text="${text// /-}"
+text="${text//[^a-z0-9-]/}"
+while [[ "$text" == *"--"* ]]; do
+    text="${text//--/-}"
+done
+text="${text#-}"
+text="${text%-}"
+echo "$text"
+exit 0
+
+
+
+// zad 5
+
+if [ $# -eq 0 ]; then
+    echo "Error: No arguments provided" >&2
+    exit 1
+fi
+
+find_min_max() {
+    local min=$1
+    local max=$1
+    for num in "$@"; do
+        if [ "$num" -lt "$min" ]; then
+            min=$num
+        fi
+        if [ "$num" -gt "$max" ]; then
+            max=$num
+        fi
+    done
+    echo "$min $max"
+}
+
+result=$(find_min_max "$@")
+set -- $result
+echo "Min: $1, Max: $2"
+exit 0
+
