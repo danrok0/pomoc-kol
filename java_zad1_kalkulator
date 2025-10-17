@@ -1,0 +1,116 @@
+//plik 1-kalkulator
+package kalkulator;
+
+
+public class kalkulator {
+
+    private double a;
+    private double b;
+    private double result;
+
+    public kalkulator(double a, double b) {
+        this.a = a;
+        this.b = b;
+        this.result = 0.0;
+    }
+
+    public double getResult() {
+        return result;
+    }
+
+    public void add() {
+        result = a + b;
+    }
+
+    public void sub() {
+        result = a - b;
+    }
+
+    public void mul() {
+        result = a * b;
+    }
+
+    public void div() {
+        result = a / b;
+    }
+
+    public void mod() {
+        result = a % b;
+    }
+}
+
+//plik 2 testy
+
+package kalkulator;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Testy jednostkowe klasy kalkulator.
+ */
+public class kalkulatorTest {
+
+    @Test
+    public void testAdd() {
+        kalkulator calc = new kalkulator(7, 12);
+        calc.add();
+        assertEquals(19.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testAddNegative() {
+        kalkulator calc = new kalkulator(-4, -9);
+        calc.add();
+        assertEquals(-13.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testSub() {
+        kalkulator calc = new kalkulator(20, 8);
+        calc.sub();
+        assertEquals(12.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testSubNegativeResult() {
+        kalkulator calc = new kalkulator(3, 15);
+        calc.sub();
+        assertEquals(-12.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testMul() {
+        kalkulator calc = new kalkulator(6, 4);
+        calc.mul();
+        assertEquals(24.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testMulByZero() {
+        kalkulator calc = new kalkulator(9, 0);
+        calc.mul();
+        assertEquals(0.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testDiv() {
+        kalkulator calc = new kalkulator(18, 3);
+        calc.div();
+        assertEquals(6.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testMod() {
+        kalkulator calc = new kalkulator(17, 5);
+        calc.mod();
+        assertEquals(2.0, calc.getResult(), 0.001);
+    }
+
+    @Test
+    public void testInitialResult() {
+        kalkulator calc = new kalkulator(8, 2);
+        assertEquals(0.0, calc.getResult(), 0.001);
+    }
+}
+
