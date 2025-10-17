@@ -31,7 +31,13 @@ public class kalkulator {
     }
 
     public void div() {
-        result = a / b;
+    // jeśli nie działa to to   result = a / b;
+
+    if (y != 0) {
+            result = a / b;
+        } else {
+            throw new ArithmeticException("Nie można dzielić przez zero!");
+        }
     }
 
     public void mod() {
