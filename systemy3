@@ -1,0 +1,114 @@
+//zad 1
+
+if [[ $# -ne 1 ]]; then
+  echo "Blad: Oczekiwano 1 argumentu" >&2
+  exit 1
+fi
+
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+  echo "Blad: Katalog nie istnieje" >&2
+  exit 1
+fi
+
+count=$(find "$dir" -maxdepth 1 -type f | wc -l)
+
+echo "Katalog zawiera $count plikow"
+
+//zad 2
+
+
+if [[ $# -ne 2 ]]; then
+  echo "Blad: Oczekiwano 2 argumentow" >&2
+  exit 1
+fi
+
+dir="$1"
+N="$2"
+
+if [[ ! -d "$dir" ]]; then
+  echo "Blad: Katalog nie istnieje" >&2
+  exit 1
+fi
+
+if ! [[ "$N" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Blad: N musi byc liczba dodatnia" >&2
+  exit 1
+fi
+
+total=$(find "$dir" -maxdepth 1 -type f -printf "%s\n" | awk '{sum+=$1} END{print sum+0}')
+
+if [[ "$total" -eq 0 ]]; then
+  echo "Katalog jest pusty"
+  exit 0
+fi
+
+find "$dir" -maxdepth 1 -type f -printf "%f %s\n" | \
+  sort -k2 -nr | \
+  head -n "$N" | \
+  while read name size; do
+    percent=$(echo "scale=2; ($size*100)/$total" | bc)
+    echo "$name $size ${percent}%"
+  done
+
+
+//zad 3
+
+if [[ $# -ne 2 ]]; then
+  echo "Blad: Oczekiwano 2 argumentow" >&2
+  exit 1
+fi
+
+iters="$1"
+win="$2"
+
+if ! [[ "$iters" =~ ^[1-9][0-9]*$ && "$win" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Blad: Argumenty musza byc liczbami dodatnimi" >&2
+  exit 1
+fi
+
+if [[ "$win" -gt "$iters" ]]; then
+  echo "Blad: Okno nie moze byc wieksze niz liczba iteracji" >&2
+  exit 1
+fi
+
+fifo="/tmp/producer_consumer_fifo_$$"
+mkfifo "$fifo"
+
+(
+  for ((i=1;i<=iters;i++)); do
+    echo $((RANDOM % 101)) > "$fifo"
+  done
+) &
+
+(
+  declare -a buf
+  count=0
+  sum=0
+
+  while read num; do
+    buf[count]="$num"
+    sum=$((sum + num))
+
+    if ((count >= win)); then
+      sum=$((sum - buf[count-win]))
+    fi
+
+    size=$((count+1))
+    if ((size > win)); then
+      size=$win
+    fi
+
+    avg=$(echo "scale=2; $sum/$size" | bc)
+
+    echo "Liczba: $num Srednia: $avg"
+
+    count=$((count+1))
+  done < "$fifo"
+) &
+
+wait
+
+rm "$fifo"
+
