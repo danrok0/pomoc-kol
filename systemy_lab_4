@@ -1,0 +1,335 @@
+zad. 1 
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+
+int main() {
+    char level[50];
+    char param[100];
+    char value[300];
+
+    /* Pobranie danych wejściowych */
+    if (!fgets(level, sizeof(level), stdin)) return 1;
+    if (!fgets(param, sizeof(param), stdin)) return 1;
+    if (!fgets(value, sizeof(value), stdin)) return 1;
+
+    /* Usuwanie znaków nowej linii */
+    level[strcspn(level, "\n")] = 0;
+    param[strcspn(param, "\n")] = 0;
+    value[strcspn(value, "\n")] = 0;
+
+    char filename[50];
+    mode_t permissions;
+
+    /* Rozpoznanie poziomu dostępu */
+    if (strcmp(level, "system") == 0) {
+        strcpy(filename, "config_system.cfg");
+        permissions = 0644;
+    } else if (strcmp(level, "user") == 0) {
+        strcpy(filename, "config_user.cfg");
+        permissions = 0600;
+    } else if (strcmp(level, "temp") == 0) {
+        strcpy(filename, "config_temp.cfg");
+        permissions = 0666;
+    } else {
+        fprintf(stderr, "Błąd: nieprawidłowy poziom dostępu\n");
+        return 1;
+    }
+
+    /* Otwarcie pliku */
+    FILE *f = fopen(filename, "a");
+    if (!f) {
+        perror("Błąd otwarcia pliku");
+        return 1;
+    }
+
+    /* Zapis do pliku */
+    fprintf(f, "%s=%s\n", param, value);
+    fclose(f);
+
+    /* Ustawienie uprawnień */
+    if (chmod(filename, permissions) != 0) {
+        fprintf(stderr, "Ostrzeżenie: nie udało się ustawić uprawnień\n");
+    }
+
+    /* Komunikat wyjściowy */
+    printf("Zapisano parametr do pliku %s z uprawnieniami %o\n", filename, permissions);
+
+    return 0;
+}
+
+
+
+
+
+zad.2
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+
+#define FIFO_PATH "ipc/messages.fifo"
+#define DIR_PATH "ipc"
+#define ARCHIVE_PATH "ipc/archive.txt"
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Użycie: program [send|receive]\n");
+        return 1;
+    }
+
+    int is_send = 0, is_receive = 0;
+
+    if (strcmp(argv[1], "send") == 0) {
+        is_send = 1;
+    } else if (strcmp(argv[1], "receive") == 0) {
+        is_receive = 1;
+    } else {
+        fprintf(stderr, "Użycie: program [send|receive]\n");
+        return 1;
+    }
+
+    /* Tworzenie katalogu ipc */
+    if (mkdir(DIR_PATH, 0777) != 0) {
+        if (errno != EEXIST) {
+            perror("mkdir");
+            return 1;
+        }
+    }
+
+    /* Tworzenie FIFO */
+    if (mkfifo(FIFO_PATH, 0666) != 0) {
+        if (errno != EEXIST) {
+            perror("mkfifo");
+            return 1;
+        }
+    }
+
+    printf("Oczekiwanie na połączenie...\n");
+
+    if (is_send) {
+        /* Tryb SEND */
+        int fd = open(FIFO_PATH, O_WRONLY);
+        if (fd < 0) {
+            perror("open");
+            return 1;
+        }
+
+        char msg[512];
+
+        while (1) {
+            printf("Podaj wiadomość: ");
+            if (!fgets(msg, sizeof(msg), stdin)) break;
+
+            msg[strcspn(msg, "\n")] = 0;  // usunięcie \n
+
+            if (write(fd, msg, strlen(msg) + 1) < 0) {
+                perror("write");
+            }
+
+            printf("Wysłano: %s\n", msg);
+
+            if (strcmp(msg, "EXIT") == 0) break;
+        }
+
+        close(fd);
+    }
+    else if (is_receive) {
+        /* Tryb RECEIVE */
+        int fd = open(FIFO_PATH, O_RDONLY);
+        if (fd < 0) {
+            perror("open");
+            return 1;
+        }
+
+        FILE *archive = fopen(ARCHIVE_PATH, "a");
+        if (!archive) {
+            perror("fopen");
+            close(fd);
+            return 1;
+        }
+
+        char buffer[512];
+        int count = 0;
+
+        while (1) {
+            ssize_t n = read(fd, buffer, sizeof(buffer));
+            if (n < 0) {
+                perror("read");
+                break;
+            }
+            if (n == 0) {
+                /* Nadawca zamknął potok */
+                break;
+            }
+
+            buffer[n] = 0;
+
+            count++;
+            printf("Wiadomość %d: %s\n", count, buffer);
+            fprintf(archive, "%d %s\n", count, buffer);
+
+            if (strcmp(buffer, "EXIT") == 0) {
+                count--;  // EXIT nie liczy się jako wiadomość
+                break;
+            }
+        }
+
+        printf("Odebrano %d wiadomości\n", count);
+
+        fclose(archive);
+        close(fd);
+    }
+
+    return 0;
+}
+
+
+
+
+zad.3
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <errno.h>
+
+#define REPORT_FILE "raport.txt"
+#define MAX_PATH 4096
+#define MAX_LINK 4096
+
+int main() {
+    char path[MAX_PATH];
+
+    if (!fgets(path, sizeof(path), stdin)) {
+        fprintf(stderr, "Błąd: nie podano ścieżki\n");
+        return 1;
+    }
+
+    /* Usuwanie znaku nowej linii */
+    path[strcspn(path, "\n")] = 0;
+
+    printf("Analizuję katalog: %s\n", path);
+
+    DIR *dir = opendir(path);
+    if (!dir) {
+        perror("opendir");
+        return 1;
+    }
+
+    struct dirent *entry;
+    struct stat st;
+    char fullpath[MAX_PATH];
+
+    int count_reg = 0;
+    int count_dir = 0;
+    int count_lnk = 0;
+    int count_other = 0;
+    long long total_size = 0;
+
+    /* Bufor na listę dowiązań */
+    typedef struct {
+        char name[MAX_PATH];
+        char target[MAX_LINK];
+    } link_info;
+
+    link_info links[512];
+    int link_count = 0;
+
+    while ((entry = readdir(dir)) != NULL) {
+
+        /* Pomijamy "." i ".." */
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
+
+        if (lstat(fullpath, &st) != 0) {
+            fprintf(stderr, "Błąd odczytu: %s\n", fullpath);
+            continue;
+        }
+
+        if (S_ISREG(st.st_mode)) {
+            count_reg++;
+            total_size += st.st_size;
+
+        } else if (S_ISDIR(st.st_mode)) {
+            count_dir++;
+
+        } else if (S_ISLNK(st.st_mode)) {
+            count_lnk++;
+
+            /* odczyt ścieżki dowiązania */
+            char target[MAX_LINK];
+            ssize_t len = readlink(fullpath, target, sizeof(target) - 1);
+
+            if (len < 0) {
+                fprintf(stderr, "Błąd readlink: %s\n", fullpath);
+                strcpy(target, "???");
+            } else {
+                target[len] = 0;
+            }
+
+            strcpy(links[link_count].name, entry->d_name);
+            strcpy(links[link_count].target, target);
+            link_count++;
+
+        } else {
+            count_other++;
+        }
+    }
+
+    closedir(dir);
+
+    /* Tworzenie raportu */
+    FILE *report = fopen(REPORT_FILE, "w");
+    if (!report) {
+        perror("fopen");
+        return 1;
+    }
+
+    fprintf(report, "RAPORT Z ANALIZY KATALOGU\n");
+    fprintf(report, "Katalog: %s\n\n", path);
+
+    fprintf(report, "Statystyki:\n");
+    fprintf(report, "Zwykłe pliki: %d\n", count_reg);
+    fprintf(report, "Katalogi: %d\n", count_dir);
+    fprintf(report, "Dowiązania symboliczne: %d\n", count_lnk);
+    fprintf(report, "Inne: %d\n\n", count_other);
+
+    fprintf(report, "Łączny rozmiar zwykłych plików: %lld bajtów (%.2f KB)\n\n",
+            total_size,
+            total_size / 1024.0);
+
+    fprintf(report, "Lista dowiązań symbolicznych:\n");
+    for (int i = 0; i < link_count; i++) {
+        fprintf(report, "%s -> %s\n", links[i].name, links[i].target);
+    }
+
+    fclose(report);
+
+    /* Podsumowanie na stdout */
+    printf("Znaleziono:\n");
+    printf("- zwykłych plików: %d\n", count_reg);
+    printf("- katalogów: %d\n", count_dir);
+    printf("- dowiązań symbolicznych: %d\n", count_lnk);
+    printf("- innych: %d\n", count_other);
+
+    printf("Raport zapisano do pliku %s\n", REPORT_FILE);
+
+    return 0;
+}
