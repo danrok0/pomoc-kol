@@ -1,0 +1,243 @@
+zad 5 po poprawkach
+
+
+#!/bin/bash
+
+zadanie5() {
+    if [ $# -ne 2 ]; then
+        echo "Blad: Oczekiwano 2 argumentow" >&2
+        return 1
+    fi
+
+    liczba_zadan="$1"
+    liczba_workerow="$2"
+
+    if ! [[ "$liczba_zadan" =~ ^[0-9]+$ ]] || ! [[ "$liczba_workerow" =~ ^[0-9]+$ ]]; then
+        echo "Blad: Argumenty musza byc liczbami" >&2
+        return 1
+    fi
+
+    if [ "$liczba_zadan" -lt 1 ]; then
+        echo "Blad: Liczba zadan musi byc >= 1" >&2
+        return 1
+    fi
+
+    if [ "$liczba_workerow" -lt 1 ] || [ "$liczba_workerow" -gt 5 ]; then
+        echo "Blad: Liczba workerow musi byc 1-5" >&2
+        return 1
+    fi
+
+    start=$SECONDS
+
+    # ---- Tworzenie potoku zadaniowego producenta ----
+    fifo_tasks="fifo_tasks"
+    rm -f "$fifo_tasks"
+    mkfifo "$fifo_tasks"
+
+    # ---- Kod C producenta zapisujemy do pliku producer.c ----
+    cat << 'EOF' > producer.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) return 1;
+    int n = atoi(argv[1]);
+    srand(time(NULL));
+
+    for (int i = 0; i < n; i++) {
+        int num = 100 + rand() % 901;
+        printf("%d\n", num);
+        fflush(stdout);
+    }
+    return 0;
+}
+EOF
+
+    # Kompilacja
+    gcc producer.c -o producer
+
+    # ---- Uruchomienie producenta ----
+    ./producer "$liczba_zadan" > "$fifo_tasks" &
+    producer_pid=$!
+
+    # ---- Tworzenie workerów ----
+    declare -a fifo_w
+    declare -a fifo_r
+    declare -a worker_pids
+
+    for ((i = 0; i < liczba_workerow; i++)); do
+        fifo_w[$i]="fifo_w$i"
+        fifo_r[$i]="fifo_r$i"
+
+        rm -f "${fifo_w[$i]}" "${fifo_r[$i]}"
+        mkfifo "${fifo_w[$i]}"
+        mkfifo "${fifo_r[$i]}"
+
+        # Kod workera
+        cat << EOF > "worker_$i.py"
+import sys
+
+def is_prime(n):
+    if n < 2:
+        return False
+    for k in range(2, int(n**0.5)+1):
+        if n % k == 0:
+            return False
+    return True
+
+worker_id = $i
+
+while True:
+    line = sys.stdin.readline().strip()
+    if not line or line == '-1':
+        break
+    num = int(line)
+    result = 'TAK' if is_prime(num) else 'NIE'
+    print(f"{num} {result} {worker_id}", flush=True)
+EOF
+
+        # Uruchomienie workera
+        python3 "worker_$i.py" < "${fifo_w[$i]}" > "${fifo_r[$i]}" &
+        worker_pids[$i]=$!
+    done
+
+    # ---- Koordynator – dystrybucja round-robin ----
+    zadanie_id=0
+    licznik=0
+    worker_idx=0
+
+    while read -r liczba; do
+        echo "$liczba" > "${fifo_w[$worker_idx]}"
+        worker_idx=$(( (worker_idx + 1) % liczba_workerow ))
+        ((licznik++))
+    done < "$fifo_tasks"
+
+    # ---- Zamykanie workerów ----
+    for ((i = 0; i < liczba_workerow; i++)); do
+        echo "-1" > "${fifo_w[$i]}"
+    done
+
+    # ---- Odbieranie wyników ----
+    for ((i = 0; i < liczba_workerow; i++)); do
+        while read -r linia; do
+            num=$(echo "$linia" | awk '{print $1}')
+            wynik=$(echo "$linia" | awk '{print $2}')
+            worker=$(echo "$linia" | awk '{print $3}')
+            echo "Zadanie $num: wynik $wynik (worker $worker)"
+        done < "${fifo_r[$i]}" &
+    done
+
+    wait
+
+    # ---- Obliczenie czasu bez bc ----
+    czas=$(awk -v s="$start" -v e="$SECONDS" 'BEGIN { printf "%.2f", e - s }')
+
+    echo "Przetworzono $licznik zadan w $czas sekund"
+
+    # ---- Sprzątanie ----
+    rm -f fifo_tasks
+    for ((i = 0; i < liczba_workerow; i++)); do
+        rm -f "fifo_w$i" "fifo_r$i" "worker_$i.py"
+    done
+    rm -f producer producer.c
+}
+
+zadanie5 "$@"
+
+
+
+zad. 2
+
+
+find_largest_files() {
+    if [ $# -ne 2 ]; then
+        echo "Blad: Oczekiwano 2 argumentow" >&2
+        return 1
+    fi
+
+    dir="$1"
+    N="$2"
+
+    if [ ! -d "$dir" ]; then
+        echo "Blad: Katalog nie istnieje" >&2
+        return 1
+    fi
+
+    case $N in
+        ''|*[!0-9]*)
+            echo "Blad: N musi byc liczba dodatnia" >&2
+            return 1
+            ;;
+    esac
+
+    if [ "$N" -le 0 ]; then
+        echo "Blad: N musi byc liczba dodatnia" >&2
+        return 1
+    fi
+
+    total_size=$(find "$dir" -maxdepth 1 -type f -printf "%s\n" | awk '{s+=$1} END {print s+0}')
+    if [ "$total_size" -eq 0 ]; then
+        echo "Katalog jest pusty"
+        return 0
+    fi
+
+    find "$dir" -maxdepth 1 -type f -printf "%f %s\n" \
+    | sort -k2 -nr \
+    | head -n "$N" \
+    | while read file size; do
+        percent=$(awk -v a="$size" -v b="$total_size" 'BEGIN { printf "%.2f", (a*100)/b }')
+        echo "$file $size ${percent}%"
+    done
+}
+
+zad. 3
+#!/bin/bash
+
+zadanie3() {
+
+    if [ $# -ne 1 ]; then
+        echo "Blad: Oczekiwano 1 argumentu" >&2
+        return 1
+    fi
+
+    plik="$1"
+
+    if [ ! -f "$plik" ]; then
+        echo "Blad: Plik nie istnieje" >&2
+        return 1
+    fi
+
+    if [ ! -s "$plik" ]; then
+        echo "Blad: Plik jest pusty" >&2
+        return 1
+    fi
+
+    suma=0
+    licznik=0
+
+    while read -r liczba; do
+        # sprawdzamy, czy to liczba całkowita
+        if ! [[ "$liczba" =~ ^-?[0-9]+$ ]]; then
+            echo "Blad: Plik zawiera nieliczbowe dane" >&2
+            return 1
+        fi
+
+        suma=$(( suma + liczba ))
+        licznik=$(( licznik + 1 ))
+    done < "$plik"
+
+    # liczenie średniej w czystym bashu:
+    # wynik_średniej = (suma * 100) / licznik -> potem dodaj przecinek
+    srednia_raw=$(( (suma * 100) / licznik ))
+    srednia_int=$(( srednia_raw / 100 ))
+    srednia_frac=$(( srednia_raw % 100 ))
+
+    # formatowanie: jeśli ułamek < 10, dodaj 0 (np. .05 zamiast .5)
+    if [ "$srednia_frac" -lt 10 ]; then
+        srednia_frac="0$srednia_frac"
+    fi
+
+    echo "Suma: $suma"
+    echo "Srednia: ${srednia_int}.${srednia_frac}"
+}
