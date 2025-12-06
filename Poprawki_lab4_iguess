@@ -241,3 +241,89 @@ zadanie3() {
     echo "Suma: $suma"
     echo "Srednia: ${srednia_int}.${srednia_frac}"
 }
+
+zad. 4
+
+
+#!/bin/bash
+
+bash_python_ipc() {
+    # --- Walidacja argumentów ---
+    if [ $# -ne 1 ]; then
+        echo "Blad: Oczekiwano 1 argumentu" >&2
+        return 1
+    fi
+
+    plik="$1"
+
+    if [ ! -f "$plik" ]; then
+        echo "Blad: Plik nie istnieje" >&2
+        return 1
+    fi
+
+    if [ ! -s "$plik" ]; then
+        echo "Blad: Plik jest pusty" >&2
+        return 1
+    fi
+
+    # --- Tworzenie potoków nazwanych ---
+    fifo_in="/tmp/fifo_in_$$"
+    fifo_out="/tmp/fifo_out_$$"
+    mkfifo "$fifo_in" "$fifo_out"
+
+    # --- Kod Pythona osadzony w Bashu ---
+    python3 - << 'EOF' < "$fifo_in" > "$fifo_out" &
+import sys
+
+total_words = 0
+total_chars = 0
+
+while True:
+    line = sys.stdin.readline().strip()
+    if line == 'EOF':
+        print(f'DONE {total_words} {total_chars}', flush=True)
+        break
+    
+    words = len(line.split())
+    chars = len(line)
+    total_words += words
+    total_chars += chars
+    
+    print(f'{words} {chars}', flush=True)
+EOF
+
+    pid_py=$!
+
+    # --- Bash komunikuje się z Pythonem ---
+    lineno=0
+    total_words=0
+    total_chars=0
+
+    exec 3> "$fifo_in"
+    exec 4< "$fifo_out"
+
+    while IFS= read -r line; do
+        lineno=$((lineno + 1))
+        echo "$line" >&3
+
+        read -r words chars <&4
+        echo "Linia $lineno: ${words} slow, ${chars} znakow"
+
+        total_words=$((total_words + words))
+        total_chars=$((total_chars + chars))
+    done < "$plik"
+
+    # --- Zakończenie komunikacji ---
+    echo "EOF" >&3
+    read -r done_tag w_sum c_sum <&4
+
+    if [ "$done_tag" = "DONE" ]; then
+        echo "Podsumowanie: ${w_sum} slow, ${c_sum} znakow"
+    fi
+
+    # --- Sprzątanie ---
+    exec 3>&-
+    exec 4<&-
+    wait "$pid_py" 2>/dev/null
+    rm -f "$fifo_in" "$fifo_out"
+}
