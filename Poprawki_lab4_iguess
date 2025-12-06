@@ -192,56 +192,68 @@ find_largest_files() {
 }
 
 zad. 3
+
+
 #!/bin/bash
 
 zadanie3() {
 
-    if [ $# -ne 1 ]; then
-        echo "Blad: Oczekiwano 1 argumentu" >&2
+    if [ $# -ne 2 ]; then
+        echo "Blad: Oczekiwano 2 argumentow" >&2
         return 1
     fi
 
-    plik="$1"
+    iter=$1
+    okno=$2
 
-    if [ ! -f "$plik" ]; then
-        echo "Blad: Plik nie istnieje" >&2
+    if ! [[ $iter =~ ^[0-9]+$ && $okno =~ ^[0-9]+$ ]]; then
+        echo "Blad: Argumenty musza byc liczbami dodatnimi" >&2
         return 1
     fi
 
-    if [ ! -s "$plik" ]; then
-        echo "Blad: Plik jest pusty" >&2
+    if [ "$okno" -gt "$iter" ]; then
+        echo "Blad: Okno nie moze byc wieksze niz liczba iteracji" >&2
         return 1
     fi
 
-    suma=0
-    licznik=0
+    fifo="fifo_pipe"
+    rm -f "$fifo"
+    mkfifo "$fifo"
 
-    while read -r liczba; do
-        # sprawdzamy, czy to liczba całkowita
-        if ! [[ "$liczba" =~ ^-?[0-9]+$ ]]; then
-            echo "Blad: Plik zawiera nieliczbowe dane" >&2
-            return 1
-        fi
+    # PRODUCER
+    (
+        for ((i=0; i<iter; i++)); do
+            echo $((RANDOM % 101))
+            sleep 0.05
+        done
+    ) > "$fifo" &
 
-        suma=$(( suma + liczba ))
-        licznik=$(( licznik + 1 ))
-    done < "$plik"
+    # CONSUMER
+    (
+        buf=()
+        while read liczba; do
+            buf+=("$liczba")
+            if [ ${#buf[@]} -gt "$okno" ]; then
+                buf=("${buf[@]:1}")
+            fi
 
-    # liczenie średniej w czystym bashu:
-    # wynik_średniej = (suma * 100) / licznik -> potem dodaj przecinek
-    srednia_raw=$(( (suma * 100) / licznik ))
-    srednia_int=$(( srednia_raw / 100 ))
-    srednia_frac=$(( srednia_raw % 100 ))
+            suma=0
+            for n in "${buf[@]}"; do
+                suma=$((suma+n))
+            done
 
-    # formatowanie: jeśli ułamek < 10, dodaj 0 (np. .05 zamiast .5)
-    if [ "$srednia_frac" -lt 10 ]; then
-        srednia_frac="0$srednia_frac"
-    fi
+            # brak bc → awk
+            srednia=$(awk -v a="$suma" -v b="${#buf[@]}" 'BEGIN{printf "%.2f", a/b}')
 
-    echo "Suma: $suma"
-    echo "Srednia: ${srednia_int}.${srednia_frac}"
+            echo "Liczba: $liczba Srednia: $srednia"
+        done
+    ) < "$fifo" &
+
+    wait
+    rm -f "$fifo"
 }
 
+zadanie3 "$@"
 zad. 4
 
 
