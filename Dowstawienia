@@ -1,0 +1,174 @@
+@BeforeEach
+void setUp() {
+    // Tworzy nowe portfolio i przykładowe akcje przed każdym testem
+    portfolio = new Portfolio(1000.0);
+    cdr = new Stock("CDR", "CD Projekt", 150.0);
+    ten = new Stock("TEN", "Ten Square Games", 100.0);
+}
+
+@Test
+void testEmptyPortfolio() {
+    // Sprawdza, że nowe portfolio ma tylko gotówkę i żadnych akcji
+    assertEquals(1000.0, portfolio.getCash());
+    assertEquals(0, portfolio.getHoldingsCount());
+    assertEquals(0, portfolio.calculateStockValue());
+    assertEquals(1000.0, portfolio.calculateTotalValue());
+}
+
+@Test
+void testAddNewStock() {
+    // Dodanie nowej akcji tworzy nowy wpis i ustawia ilość
+    portfolio.addStock(cdr, 2);
+    assertEquals(1, portfolio.getHoldingsCount());
+    assertEquals(2, portfolio.getStockQuantity(cdr));
+}
+
+@Test
+void testAddSameStockIncreasesQuantity() {
+    // Dodanie tej samej akcji zwiększa jej ilość zamiast tworzyć nowy wpis
+    portfolio.addStock(cdr, 2);
+    portfolio.addStock(cdr, 3);
+    assertEquals(1, portfolio.getHoldingsCount());
+    assertEquals(5, portfolio.getStockQuantity(cdr));
+}
+
+@Test
+void testAddDifferentStocksCreatesSeparateHoldings() {
+    // Różne akcje powinny tworzyć oddzielne wpisy w portfelu
+    portfolio.addStock(cdr, 2);
+    portfolio.addStock(ten, 1);
+    assertEquals(2, portfolio.getHoldingsCount());
+}
+
+@Test
+void testCalculateStockAndTotalValue() {
+    // Sprawdza poprawne obliczanie wartości akcji i wartości całkowitej portfela
+    // CDR: 2 × 150 = 300, TEN: 3 × 100 = 300 → razem 600
+    portfolio.addStock(cdr, 2);
+    portfolio.addStock(ten, 3);
+    assertEquals(600.0, portfolio.calculateStockValue());
+    assertEquals(1600.0, portfolio.calculateTotalValue());
+}
+
+@Test
+void testAddStockWhenFullThrowsException() {
+    // Gdy portfel osiągnie limit 10 różnych akcji, dodanie kolejnej powinno rzucić wyjątek
+    for (int i = 0; i < 10; i++) {
+        portfolio.addStock(new Stock("SYM" + i, "Company" + i, 10.0), 1);
+    }
+    assertThrows(IllegalStateException.class, () ->
+            portfolio.addStock(new Stock("OVER", "Overflow", 5.0), 1));
+}
+
+@Test
+void testInvalidInputs() {
+    // Nie można dodać null jako akcji oraz ilość musi być > 0
+    assertThrows(IllegalArgumentException.class, () -> portfolio.addStock(null, 1));
+    assertThrows(IllegalArgumentException.class, () -> portfolio.addStock(cdr, 0));
+}
+
+@Test
+void testInitialCashNegativeThrowsException() {
+    // Wartość początkowej gotówki nie może być ujemna
+    assertThrows(IllegalArgumentException.class, () -> new Portfolio(-1.0));
+}
+
+@Test
+void testGetStockQuantityNotPresent() {
+    // Dla akcji nieobecnej w portfelu ilość powinna wynosić 0
+    assertEquals(0, portfolio.getStockQuantity(new Stock("ZZZ", "Not Present", 10.0)));
+}
+
+@Test
+void testAddStockNullStockThrowsException() {
+    // Dodanie null jako akcji powinno rzucić wyjątek
+    assertThrows(IllegalArgumentException.class, () -> portfolio.addStock(null, 5));
+}
+
+@Test
+void testPortfolioIsFullEdgeCase() {
+    // Po dodaniu 10 różnych akcji portfel powinien osiągnąć maksymalny rozmiar
+    for (int i = 0; i < 10; i++) {
+        portfolio.addStock(new Stock("SYM" + i, "Company" + i, 10.0), 1);
+    }
+    assertEquals(10, portfolio.getHoldingsCount());
+}
+
+@Test
+void testCalculateStockValueNoStocks() {
+    // Portfolio bez akcji powinno mieć wartość akcji = 0, a wartość całkowitą = gotówka
+    Portfolio emptyPortfolio = new Portfolio(200.0);
+    assertEquals(0.0, emptyPortfolio.calculateStockValue());
+    assertEquals(200.0, emptyPortfolio.calculateTotalValue());
+}
+
+
+i drugie
+
+
+@Test
+void testStockCreationAndGetters() {
+    // Sprawdza, czy konstruktor poprawnie ustawia pola
+    Stock stock = new Stock("CDR", "CD Projekt", 150.0);
+    assertEquals("CDR", stock.getSymbol());
+    assertEquals("CD Projekt", stock.getName());
+    assertEquals(150.0, stock.getInitialPrice());
+}
+
+@Test
+void testEqualsAndHashCodeSameSymbol() {
+    // Sprawdza, czy dwa obiekty z tym samym symbolem są równe
+    // i mają ten sam hashCode
+    Stock s1 = new Stock("CDR", "CD Projekt", 100);
+    Stock s2 = new Stock("CDR", "CD Projekt Red", 200);
+    assertEquals(s1, s2);
+    assertEquals(s1.hashCode(), s2.hashCode());
+}
+
+@Test
+void testNotEqualDifferentSymbol() {
+    // Sprawdza, że obiekty z różnymi symbolami NIE są równe
+    Stock s1 = new Stock("CDR", "CD Projekt", 100);
+    Stock s2 = new Stock("TEN", "Ten Square Games", 100);
+    assertNotEquals(s1, s2);
+}
+
+@Test
+void testInvalidArguments() {
+    // Sprawdza, że konstruktor rzuca wyjątek dla niepoprawnych argumentów
+    assertThrows(IllegalArgumentException.class, () -> new Stock("", "Name", 10));
+    assertThrows(IllegalArgumentException.class, () -> new Stock("SYM", "", 10));
+    assertThrows(IllegalArgumentException.class, () -> new Stock("SYM", "Name", 0));
+}
+
+@Test
+void testSymbolAndNameTrimming() {
+    // Sprawdza, że wartości nie są trimowane (powinny zostać zwrócone dokładnie takie jak podano)
+    Stock s = new Stock("  CDR  ", "  CD Projekt  ", 100.0);
+    assertEquals("  CDR  ", s.getSymbol());
+    assertEquals("  CD Projekt  ", s.getName());
+}
+
+@Test
+void testEqualsItself() {
+    // Sprawdza, że obiekt jest równy samemu sobie
+    Stock stock = new Stock("TEN", "Ten Square Games", 100);
+    assertEquals(stock, stock);
+}
+
+@Test
+void testHashCodeConsistency() {
+    // Sprawdza, że hashCode jest spójny — wielokrotne wywołania dają ten sam wynik
+    Stock s1 = new Stock("ABC", "Company ABC", 10.0);
+    int hash1 = s1.hashCode();
+    int hash2 = s1.hashCode();
+    assertEquals(hash1, hash2);
+}
+
+@Test
+void testEqualsWithNullAndOtherType() {
+    // Sprawdza, że obiekt nie jest równy null ani obiektowi innego typu
+    Stock s1 = new Stock("QWE", "Test Name", 12.1);
+    assertNotEquals(null, s1);
+    assertNotEquals(s1, "QWE");
+}
