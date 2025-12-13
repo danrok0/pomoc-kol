@@ -1,0 +1,273 @@
+do proj
+
+asset
+
+
+package com.stockmarket.domain;
+
+import java.math.BigDecimal;
+
+public abstract class Asset {
+    private final String name;
+    private final BigDecimal basePrice;
+
+    public Asset(String name, BigDecimal basePrice) {
+        this.name = name;
+        this.basePrice = basePrice;
+    }
+
+    // Metoda abstrakcyjna - klucz do polimorfizmu
+    public abstract BigDecimal calculateRealValue(int quantity);
+
+    // Metoda wspólna - koszt zakupu (cena * ilość)
+    // Akcje mogą to nadpisać jeśli mają opłaty wstępne
+    public BigDecimal calculatePurchaseCost(int quantity) {
+        return basePrice.multiply(BigDecimal.valueOf(quantity));
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public BigDecimal getBasePrice() {
+        return basePrice;
+    }
+}
+
+
+commodity
+
+
+package com.stockmarket.domain;
+
+import java.math.BigDecimal;
+
+public class Commodity extends Asset {
+    private final BigDecimal storageCostPerUnit;
+
+    public Commodity(String name, BigDecimal basePrice, BigDecimal storageCostPerUnit) {
+        super(name, basePrice);
+        this.storageCostPerUnit = storageCostPerUnit;
+    }
+
+    @Override
+    public BigDecimal calculateRealValue(int quantity) {
+        BigDecimal rawValue = getBasePrice().multiply(BigDecimal.valueOf(quantity));
+        BigDecimal storageCost = storageCostPerUnit.multiply(BigDecimal.valueOf(quantity));
+        // Wartość pomniejszona o koszt magazynowania
+        return rawValue.subtract(storageCost).max(BigDecimal.ZERO);
+    }
+}
+
+currency
+
+package com.stockmarket.domain;
+
+import java.math.BigDecimal;
+
+public class Currency extends Asset {
+    private final BigDecimal spread;
+
+    public Currency(String name, BigDecimal basePrice, BigDecimal spread) {
+        super(name, basePrice);
+        this.spread = spread;
+    }
+
+    @Override
+    public BigDecimal calculateRealValue(int quantity) {
+        // Wartość to (Cena Rynkowa - Spread) * ilość
+        BigDecimal bidPrice = getBasePrice().subtract(spread);
+        return bidPrice.multiply(BigDecimal.valueOf(quantity));
+    }
+}
+
+
+package com.stockmarket.domain;
+
+import java.math.BigDecimal;
+
+public class Share extends Asset {
+    private static final BigDecimal HANDLING_FEE = new BigDecimal("5.00");
+
+    public Share(String name, BigDecimal basePrice) {
+        super(name, basePrice);
+    }
+
+    @Override
+    public BigDecimal calculateRealValue(int quantity) {
+        BigDecimal rawValue = getBasePrice().multiply(BigDecimal.valueOf(quantity));
+        // Wartość to cena rynkowa pomniejszona o opłatę manipulacyjną
+        return rawValue.subtract(HANDLING_FEE).max(BigDecimal.ZERO);
+    }
+
+    @Override
+    public BigDecimal calculatePurchaseCost(int quantity) {
+        // Przy zakupie też płacimy prowizję
+        return super.calculatePurchaseCost(quantity).add(HANDLING_FEE);
+    }
+}
+
+
+
+portfolio
+
+
+package com.stockmarket.logic;
+
+import com.stockmarket.domain.Asset;
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+
+public class Portfolio {
+    private BigDecimal cash;
+    private final Map<Asset, Integer> holdings = new HashMap<>();
+
+    public Portfolio(BigDecimal initialCash) {
+        this.cash = initialCash;
+    }
+
+    public void addAsset(Asset asset, int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Ilość musi być dodatnia");
+        }
+
+        BigDecimal cost = asset.calculatePurchaseCost(quantity);
+
+        if (cash.compareTo(cost) < 0) {
+            throw new IllegalStateException("Niewystarczające środki na zakup");
+        }
+
+        cash = cash.subtract(cost);
+        holdings.merge(asset, quantity, Integer::sum);
+    }
+
+    public BigDecimal calculateTotalValue() {
+        BigDecimal assetsValue = BigDecimal.ZERO;
+
+        for (Map.Entry<Asset, Integer> entry : holdings.entrySet()) {
+            Asset asset = entry.getKey();
+            int quantity = entry.getValue();
+            // POLIMORFIZM: Każde aktywo samo liczy swoją wartość
+            assetsValue = assetsValue.add(asset.calculateRealValue(quantity));
+        }
+
+        return assetsValue.add(cash);
+    }
+
+    public BigDecimal getCash() {
+        return cash;
+    }
+}
+
+testpoly
+
+package com.stockmarket.domain;
+
+import org.junit.jupiter.api.Test;
+import java.math.BigDecimal;
+import static org.assertj.core.api.Assertions.assertThat;
+
+class AssetLogicTest {
+
+    @Test
+    void shareShouldReduceValueByHandlingFee() {
+        // Akcja warta 100, opłata 5.
+        // 1 sztuka powinna być warta 95.
+        Share share = new Share("TestShare", new BigDecimal("100.00"));
+        assertThat(share.calculateRealValue(1))
+                .isEqualByComparingTo(new BigDecimal("95.00"));
+    }
+
+    @Test
+    void commodityShouldReduceValueByStorageCost() {
+        // Surowiec 100, koszt mag. 10.
+        // 2 sztuki: (100*2) - (10*2) = 200 - 20 = 180.
+        Commodity gold = new Commodity("Gold", new BigDecimal("100.00"), new BigDecimal("10.00"));
+        assertThat(gold.calculateRealValue(2))
+                .isEqualByComparingTo(new BigDecimal("180.00"));
+    }
+
+    @Test
+    void currencyShouldReduceValueBySpread() {
+        // Waluta 5.00, spread 0.20.
+        // Cena Bid = 4.80.
+        // 100 sztuk = 480.00.
+        Currency euro = new Currency("EUR", new BigDecimal("5.00"), new BigDecimal("0.20"));
+        assertThat(euro.calculateRealValue(100))
+                .isEqualByComparingTo(new BigDecimal("480.00"));
+    }
+}
+
+portofliotest
+
+
+package com.stockmarket.logic;
+
+import com.stockmarket.domain.*;
+import org.junit.jupiter.api.Test;
+import java.math.BigDecimal;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class PortfolioTest {
+
+    @Test
+    void polymorphismTest_assetsWithSameBasePriceShouldHaveDifferentRealValues() {
+        // given: 3 różne aktywa o tej samej cenie 100 PLN
+        BigDecimal price = new BigDecimal("100.00");
+        Share share = new Share("S", price);             // 100 - 5 = 95
+        Commodity commodity = new Commodity("C", price, new BigDecimal("10")); // 100 - 10 = 90
+        Currency currency = new Currency("M", price, new BigDecimal("1"));     // 99
+
+        // when
+        BigDecimal v1 = share.calculateRealValue(1);
+        BigDecimal v2 = commodity.calculateRealValue(1);
+        BigDecimal v3 = currency.calculateRealValue(1);
+
+        // then: Każde musi dać inny wynik
+        assertThat(v1).isNotEqualByComparingTo(v2);
+        assertThat(v2).isNotEqualByComparingTo(v3);
+        assertThat(v1).isNotEqualByComparingTo(v3);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenBuyingTooMuch() {
+        // given: portfel z 100 PLN
+        Portfolio p = new Portfolio(new BigDecimal("100.00"));
+        Share expensive = new Share("Drogie", new BigDecimal("200.00"));
+
+        // then: próba zakupu musi rzucić wyjątek
+        assertThatThrownBy(() -> p.addAsset(expensive, 1))
+                .isInstanceOf(IllegalStateException.class);
+    }
+}
+
+
+pom.xml
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.stockmarket</groupId>
+    <artifactId>stock-market-sim</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
+share
+
