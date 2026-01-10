@@ -1,1 +1,9 @@
 printf "git init\nprintf \"*.log\\n*.tar.gz\\n*.tar.bz2\\ndownloaded_logs/\\n*.tmp\\n*.temp\" > .gitignore\ngit add .\ngit commit -m \"Initial commit: projekt analizy logów\"\ngit status\ngit status --ignored" > git_workflow.txt
+cat << EOF > git_workflow.txt
+git init
+printf "*.log\n*.tar.gz\n*.tar.bz2\ndownloaded_logs/\n*.tmp\n*.temp" > .gitignore
+git add .
+git commit -m "Initial commit: projekt analizy logów"
+git status
+git status --ignored
+EOF
