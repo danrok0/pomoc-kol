@@ -7,3 +7,11 @@ git commit -m "Initial commit: projekt analizy logów"
 git status
 git status --ignored
 EOF
+
+
+git init
+printf "*.log\n*.tar.gz\n*.tar.bz2\ndownloaded_logs/\n*.tmp\n*.temp" > .gitignore
+git add .
+git commit -m "Initial commit: projekt analizy logów"
+git status
+git status --ignored
