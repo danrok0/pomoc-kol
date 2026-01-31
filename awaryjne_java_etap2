@@ -1,0 +1,58 @@
+Asset.java
+
+
+
+package com.stockmarket.domain;
+
+import java.math.BigDecimal;
+import java.util.Objects;
+
+public abstract class Asset {
+    private final String name;
+    private final BigDecimal basePrice;
+
+    public Asset(String name, BigDecimal basePrice) {
+        this.name = name;
+        this.basePrice = basePrice;
+    }
+
+    // Metoda abstrakcyjna 
+    public abstract BigDecimal calculateRealValue(int quantity);
+
+    // Metoda wspólna - koszt zakupu (cena * ilość)
+    // Akcje mogą to nadpisać jeśli mają opłaty wstępne
+    public BigDecimal calculatePurchaseCost(int quantity) {
+        return basePrice.multiply(BigDecimal.valueOf(quantity));
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public BigDecimal getBasePrice() {
+        return basePrice;
+    }
+
+    // NOWA CZĘŚĆ
+
+    @Override
+    public boolean equals(Object o) {
+        // 1. Sprawdzenie referencji (czy to ten sam obiekt w pamięci)
+        if (this == o) return true;
+        // 2. Sprawdzenie null i klasy (czy obiekty są tego samego typu)
+        if (o == null || getClass() != o.getClass()) return false;
+        
+        Asset asset = (Asset) o;
+        
+        // 3. Porównanie pól biznesowych (nazwa i cena)
+        // Używamy Objects.equals, żeby bezpiecznie obsłużyć nulle (choć tu pola są final)
+        return Objects.equals(name, asset.name) &&
+               Objects.equals(basePrice, asset.basePrice);
+    }
+
+    @Override
+    public int hashCode() {
+        // Generowanie hasha na podstawie tych samych pól co w equals
+        return Objects.hash(name, basePrice);
+    }
+}
