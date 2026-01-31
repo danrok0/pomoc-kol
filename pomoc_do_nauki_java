@@ -1,0 +1,45 @@
+jakie biblioteki zostały uzyte czy tylko j junit
+
+typizaja poszedł Pan na Enumy i czy nie ma tam zadnych odwołań do stringów
+
+partie zakupowe co to jest, gdzie są, co tam się dzieje 
+
+kazda partia przechowywana osobna jako coś niedosłyszałem , gdzie to jest
+
+jak się dodaje gdy zakup jest jakiś zrobiony,gdzie to wykorzystywane ze te partie zakupowe zrobiłem 
+
+skąd wiemy co jest kupione
+
+jakie struktury danych, jak to działa że jest odczyt w czasie stałym i co to daje, czy w tych typach danych zawsze jest odczyt w czasie stałym, czy w mapie jest odczyt w czasie stałym i dlaczego, jak symbol jest hashowany, skąd wiemy że nie ma duplikatów,o co chodzi z hashSet i jak się dodaje do hashSetu, czy jest zabezpieczone gdy ten sam hashCode
+
+kolejka fifo gdzie jest, jak działa, czy jak chcemy sprzedać to czy będzie w dobrej kolejności, jak jest mniej niż coś( nie wiem o co chodzi,) jeszcze coś że wyczerpiemy całość i zostanie najstarsza, jakieś takie rzeczy z tą kolejką
+
+raporty na temat sprzedaży,co w tym raporcie się znajduje 
+
+przechowywanie tych danych, czyli możemy np portfolio wrzucić do pliku i potem odczytać i jak to działa, jaka struktura przy tym zapisie, jak wygląda format w któreym zapisuje
+
+testy sprzedazy, jak to jest rozbite na kilka partii i co sprawdzam w tych testach, jakieś inne dodatki do tego
+
+testy kolejka priorytetowa, priorytety zleceń, jak to sprawdzam
+
+jak testuje zapis/odczyt plików albo zapis odc... te ... kropki to nie da się zrozumieć co tam jest może się domyślisz, jak wygląda ten schemat co zrobiłem i co sprawdzam, jaki tu jest scenariusz co tu się dzieje
+
+czy rzucaam wyjątki w kodzie, testy wyjątków, czy są wszystkie sprawdzone
+
+warunki brzegowe, czym są i gdzie
+
+
+
+Dodatkowe-odnośnie innego kodu więc mogą być różnice więc znaleźć coś podobnego u mnie- w locie przechowuje ceny i czy asset ma poza tym cene, gdzie są jakie ceny i wszystko apropo tego
+
+skąd wiemy w typach danych ze odczyty będą szybkie, skąd wiemy ze hashowanie dam nam odczyt w czasie staym dlaczego, co jak będą te same hashe a jeśli są różne obojętne stałe hash(jakoś tak ale chodzi zeby unikalność zeby to bylo w czasie stalym), kolejka Fifo jak tam działa i że sprzedaje najpierw najstarsze i że sprzedaje część lotu i czegoś jeszcze na raz, jak działa przechowywanie danych przy tych raportach
+
+testy, że sprzedajemy po najstarszych, jak weryfikujemy ze jak się sprzeda to np starszy i jak to działa,
+
+test odczyt/zapis czy jak zapiszemy później portfolio to czy się dobrze później odczyta i jak działa ten test
+
+testywyjątki jakie, jak działają, czy przy zakupach są jakieś wyjątki, czy jakieś ithrowy sprawdzam
+
+test warunków brzegowych np wyczyścimy sobie całość portfolio albo coś przekręcimy czy coś takiego sprawdzam, jakieś takie skrajne przypadki
+
+sprawdzić nie tylko tabelke ale i opis co miało być jak zrobione bo o to pyta
