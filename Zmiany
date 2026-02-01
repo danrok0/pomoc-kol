@@ -1,0 +1,121 @@
+========================================================================
+   ŚCIĄGA NA OBRONĘ - SYSTEMY OPERACYJNE (BASH & C)
+========================================================================
+
+------------------------------------------------------------------------
+   CZĘŚĆ 1: BASH (monitor.sh)
+------------------------------------------------------------------------
+
+>>> MODYFIKACJA 1: USUWAJ NAJWIĘKSZY PLIK (zamiast najstarszego)
+    Gdzie: Linia definiująca zmienną OLDEST_FILE (wewnątrz if)
+    Co robi: Sortuje po rozmiarze (-S) i bierze górę (head), czyli największy.
+
+    ZAMIEŃ LINIĘ:
+    OLDEST_FILE=$(ls -1t "$DIR" | tail -n 1)
+
+    NA TO:
+    OLDEST_FILE=$(ls -1S "$DIR" | head -n 1)
+
+
+>>> MODYFIKACJA 2: PRZENOŚ PLIKI (MOVE) ZAMIAST USUWAĆ
+    Gdzie: Blok wewnątrz "else" (tam gdzie jest rm).
+    Co robi: Tworzy folder 'archive' i przenosi tam plik.
+
+    ZAMIEŃ CAŁY BLOK OD "FULL_PATH=..." AŻ DO "fi" (końca else) NA TO:
+
+                FULL_PATH="$DIR/$OLDEST_FILE"
+                ARCHIVE="$DIR/archive"
+
+                # Jeśli folder archiwum nie istnieje, stwórz go
+                if [ ! -d "$ARCHIVE" ]; then mkdir "$ARCHIVE"; fi
+
+                # Przenoszenie (mv) zamiast usuwania (rm)
+                if mv "$FULL_PATH" "$ARCHIVE/"; then
+                    DATE_NOW=$(date "+%Y-%m-%d %H:%M:%S")
+                    echo "[$DATE_NOW] Przeniesiono do archiwum: $OLDEST_FILE" >> "$LOG_FILE"
+                    echo "[ARCHIWIZACJA] Przeniesiono: $OLDEST_FILE"
+                    ((REMOVED_COUNT++))
+                else
+                    echo "[BŁĄD] Nie udało się przenieść pliku."
+                fi
+
+
+>>> MODYFIKACJA 3: LIMIT PLIKÓW JAKO ARGUMENT (np. ./monitor.sh D 10)
+    Gdzie: Początek pliku i warunek w pętli.
+
+    KROK A (Na samej górze, pod DIR=$1):
+    LIMIT=$2
+    if [ -z "$LIMIT" ]; then LIMIT=5; fi  # Domyślnie 5, jak nie podano
+
+    KROK B (W pętli while, zmień warunek):
+    if [ "$FILE_COUNT" -gt "$LIMIT" ]; then
+
+
+>>> MODYFIKACJA 4: IGNORUJ PLIKI .LOG
+    Gdzie: Linia licząca pliki (find).
+
+    ZAMIEŃ LINIĘ:
+    FILE_COUNT=$(find "$DIR" -maxdepth 1 -type f | wc -l)
+
+    NA TO:
+    FILE_COUNT=$(find "$DIR" -maxdepth 1 -type f -not -name "*.log" | wc -l)
+
+
+------------------------------------------------------------------------
+   CZĘŚĆ 2: C - WĄTKI (main.c)
+------------------------------------------------------------------------
+
+>>> MODYFIKACJA 1: OBLICZ SUMĘ ELEMENTÓW (zamiast wypisywać)
+    Cel: Zsumować wybrane elementy do zmiennej globalnej.
+
+    KROK A (Góra pliku, dodaj zmienną globalną):
+    long long global_sum = 0;
+
+    KROK B (W funkcji thread_function, wewnątrz mutexa):
+    pthread_mutex_lock(&print_mutex);
+    // printf(...);  <-- To zakomentuj
+    global_sum += val;
+    pthread_mutex_unlock(&print_mutex);
+
+    KROK C (W main, na samym końcu przed return 0):
+    printf("--- Obliczona suma całkowita: %lld ---\n", global_sum);
+
+
+>>> MODYFIKACJA 2: TYLKO 2 WĄTKI (PARZYSTE / NIEPARZYSTE)
+    Cel: Wątek 0 bierze indeksy 0,2,4... Wątek 1 bierze 1,3,5...
+
+    KROK A (W funkcji thread_function, zmień krok pętli):
+    // Zmieniamy i+=3 na i+=2
+    for (int i = id; i < 10; i += 2) { ... }
+
+    KROK B (W main, zmień liczbę wątków na 2):
+    // Zmień w pętli tworzenia:
+    for (long i = 0; i < 2; i++) { ... }
+
+    // Zmień w pętli join (czekania):
+    for (int i = 0; i < 2; i++) { ... }
+
+
+>>> MODYFIKACJA 3: ZMODYFIKUJ WARTOŚCI (np. POMNÓŻ x2)
+    Cel: Zamiast tylko czytać, zmień zawartość tablicy.
+
+    W funkcji thread_function (wewnątrz mutexa):
+
+    pthread_mutex_lock(&print_mutex);
+    
+    int stary = numbers[i];
+    numbers[i] = numbers[i] * 2; // Mnożenie
+    printf("[Wątek %ld] Zmiana indeksu %d: %d -> %d\n", id, i, stary, numbers[i]);
+    
+    pthread_mutex_unlock(&print_mutex);
+
+
+>>> MODYFIKACJA 4: DODAJ OPOŹNIENIE (SLEEP)
+    Cel: Pokazać przeplot wątków.
+
+    W funkcji thread_function (zaraz po otwarciu pętli for):
+    
+    usleep(100000); // Czeka 0.1 sekundy (wymaga #include <unistd.h>)
+    // Reszta kodu bez zmian...
+
+========================================================================
