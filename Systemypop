@@ -165,3 +165,187 @@ int main() {
 
     return 0;
 }
+
+
+
+
+
+
+zadanie 1
+
+#!/bin/bash
+
+# 1. Sprawdzenie argumentu (ścieżka do katalogu)
+if [ "$#" -ne 1 ]; then
+    echo "Użycie: $0 <ścieżka_do_katalogu>"
+    exit 1
+fi
+
+DIR="$1"
+
+# Sprawdzenie, czy katalog istnieje
+if [ ! -d "$DIR" ]; then
+    echo "Błąd: Katalog '$DIR' nie istnieje."
+    exit 1
+fi
+
+LOG_FILE="report.log"
+SAFE_MODE=0      # 0 = Normalny (usuwa), 1 = Safe Mode (tylko ostrzega)
+REMOVED_COUNT=0  # Licznik usuniętych plików do statystyk
+
+# --- OBSŁUGA SYGNAŁÓW (Wymaganie pkt 4) ---
+
+# Funkcja dla SIGINT (Ctrl+C)
+handle_sigint() {
+    echo ""
+    echo "--- ZAKOŃCZONO ---"
+    echo "Statystyka: Usunięto łącznie $REMOVED_COUNT plików."
+    exit 0
+}
+
+# Funkcja dla SIGUSR1 (Przełączanie trybu)
+handle_sigusr1() {
+    if [ "$SAFE_MODE" -eq 0 ]; then
+        SAFE_MODE=1
+        echo "[SYSTEM] Przełączono w TRYB SAFE MODE (Tylko ostrzeganie)."
+    else
+        SAFE_MODE=0
+        echo "[SYSTEM] Przełączono w TRYB NORMALNY (Usuwanie aktywne)."
+    fi
+}
+
+# Rejestracja sygnałów
+trap 'handle_sigint' SIGINT
+trap 'handle_sigusr1' SIGUSR1
+
+echo "Start monitorowania katalogu: '$DIR'"
+echo "PID procesu: $$ (Użyj 'kill -SIGUSR1 $$' aby przełączyć tryb)"
+
+# 2. Pętla nieskończona
+while true; do
+    # Liczymy tylko pliki (-type f), pomijamy katalogi wewnątrz
+    FILE_COUNT=$(find "$DIR" -maxdepth 1 -type f | wc -l)
+
+    # 3. Logika: Jeśli plików > 5
+    if [ "$FILE_COUNT" -gt 5 ]; then
+        
+        # Znajdź najstarszy plik (ls -t sortuje od najnowszego, tail -1 bierze ostatni)
+        # ls -1t wypisuje po jednym w linii
+        OLDEST_FILE=$(ls -1t "$DIR" | tail -n 1)
+
+        # Sprawdzenie czy udało się znaleźć nazwę (zabezpieczenie)
+        if [ -n "$OLDEST_FILE" ]; then
+            if [ "$SAFE_MODE" -eq 1 ]; then
+                echo "[SAFE MODE] Przekroczono limit ($FILE_COUNT). Najstarszy plik: '$OLDEST_FILE' (Nie usuwam)."
+            else
+                # Konstrukcja pełnej ścieżki (wymagane cudzysłowy dla spacji!)
+                FULL_PATH="$DIR/$OLDEST_FILE"
+                
+                # Próba usunięcia
+                if rm "$FULL_PATH"; then
+                    # Pobranie daty w formacie dla loga
+                    DATE_NOW=$(date "+%Y-%m-%d %H:%M:%S")
+                    
+                    # Logowanie zgodnie z treścią zadania
+                    echo "[$DATE_NOW] Usunięto $OLDEST_FILE" >> "$LOG_FILE"
+                    
+                    echo "[USUNIĘTO] $OLDEST_FILE (Liczba plików była: $FILE_COUNT)"
+                    ((REMOVED_COUNT++))
+                else
+                    echo "[BŁĄD] Nie udało się usunąć pliku: $OLDEST_FILE"
+                fi
+            fi
+        fi
+    fi
+
+    # Czekaj 2 sekundy (Wymaganie pkt 2)
+    sleep 2
+done
+
+
+
+
+
+zadanie 2
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <time.h>
+
+// 1. Tablica globalna (Wymaganie pkt 1)
+int numbers[10];
+
+// Mutex do ochrony printf (Wymaganie pkt 4)
+pthread_mutex_t print_mutex;
+
+// Funkcja wykonywana przez wątek
+void* thread_function(void* arg) {
+    // Rzutowanie argumentu na typ long (ID wątku: 0, 1 lub 2)
+    long id = (long)arg;
+
+    // 3. Każdy wątek przetwarza co trzeci element
+    // Wątek 0 startuje od 0 -> 0, 3, 6, 9
+    // Wątek 1 startuje od 1 -> 1, 4, 7
+    // Wątek 2 startuje od 2 -> 2, 5, 8
+    for (int i = id; i < 10; i += 3) {
+        int val = numbers[i];
+
+        // Sekcja krytyczna - blokujemy mutex przed wypisaniem
+        pthread_mutex_lock(&print_mutex);
+        
+        // Wypisanie zgodnie z formatem z zadania
+        printf("[Wątek %ld] Element[%d] = %d\n", id, i, val);
+        
+        // Odblokowanie mutexa
+        pthread_mutex_unlock(&print_mutex);
+    }
+
+    return NULL;
+}
+
+int main() {
+    // Inicjalizacja liczb losowych
+    srand(time(NULL));
+
+    // Wypełnienie tablicy globalnej losowymi liczbami (0-99)
+    printf("--- Tablica początkowa: ---\n");
+    for (int i = 0; i < 10; i++) {
+        numbers[i] = rand() % 100;
+        printf("%d ", numbers[i]);
+    }
+    printf("\n---------------------------\n");
+
+    // Inicjalizacja mutexa
+    if (pthread_mutex_init(&print_mutex, NULL) != 0) {
+        perror("Błąd mutexa");
+        return 1;
+    }
+
+    // Tablica identyfikatorów wątków
+    pthread_t threads[3];
+
+    // 2. Tworzenie 3 wątków roboczych
+    for (long i = 0; i < 3; i++) {
+        // Przekazujemy 'i' jako argument. Rzutujemy na (void*) bo taki typ przyjmuje funkcja.
+        // Używamy 'long', aby uniknąć ostrzeżeń kompilatora na systemach 64-bit.
+        if (pthread_create(&threads[i], NULL, thread_function, (void*)i) != 0) {
+            perror("Błąd tworzenia wątku");
+            return 1;
+        }
+    }
+
+    // 5. Czekanie na zakończenie wszystkich wątków (Wymaganie pkt 5)
+    for (int i = 0; i < 3; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // 6. Zwolnienie zasobów (Wymaganie pkt 6)
+    pthread_mutex_destroy(&print_mutex);
+
+    printf("--- Koniec programu ---\n");
+    return 0;
+}
+
