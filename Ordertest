@@ -1,0 +1,56 @@
+package com.stockmarket.logic;
+
+import org.junit.jupiter.api.Test;
+import java.math.BigDecimal;
+import java.util.PriorityQueue;
+import static org.assertj.core.api.Assertions.assertThat;
+
+class OrderTest {
+
+    // --- TEST 1: KUPNO (Happy Path) ---
+    // Sprawdza, czy dla BUY wyższa cena jest ważniejsza.
+    @Test
+    void buyOrder_ShouldPrioritizeHigherPrice() {
+        // TWORZENIE: Mamy dwie oferty kupna: 100 zł i 105 zł.
+        Order lowBid = new Order("XYZ", Order.Type.BUY, new BigDecimal("100.00"), 10);
+        Order highBid = new Order("XYZ", Order.Type.BUY, new BigDecimal("105.00"), 10);
+        
+        // AKCJA: Wrzucamy do kolejki (kolejność wrzucania nie ma znaczenia).
+        PriorityQueue<Order> queue = new PriorityQueue<>();
+        queue.add(lowBid);
+        queue.add(highBid);
+
+        // ASERCJA: Sprawdzamy szczyt kolejki (peek).
+        // Musi tam być highBid (105 zł), bo chcemy sprzedać temu, kto płaci więcej.
+        assertThat(queue.peek()).isEqualTo(highBid);
+    }
+
+    // --- TEST 2: SPRZEDAŻ (Happy Path) ---
+    // Sprawdza, czy dla SELL niższa cena jest ważniejsza.
+    @Test
+    void sellOrder_ShouldPrioritizeLowerPrice() {
+        // TWORZENIE: Oferty sprzedaży: 100 zł (tania) i 105 zł (droga).
+        Order cheapOffer = new Order("ABC", Order.Type.SELL, new BigDecimal("100.00"), 5);
+        Order expensiveOffer = new Order("ABC", Order.Type.SELL, new BigDecimal("105.00"), 5);
+        
+        PriorityQueue<Order> queue = new PriorityQueue<>();
+        queue.add(expensiveOffer);
+        queue.add(cheapOffer);
+
+        // ASERCJA: Na szczycie musi być cheapOffer (100 zł), bo jest bardziej konkurencyjna.
+        assertThat(queue.peek()).isEqualTo(cheapOffer);
+    }
+
+    // --- TEST 3: PRZYPADEK BRZEGOWY (Równość) ---
+    // Co jeśli ceny są identyczne? System nie może zgłupieć.
+    @Test
+    void compareTo_ShouldReturnZeroForSamePriceAndType() {
+        // TWORZENIE: Dwa identyczne zlecenia.
+        Order o1 = new Order("A", Order.Type.BUY, new BigDecimal("100"), 1);
+        Order o2 = new Order("A", Order.Type.BUY, new BigDecimal("100"), 1);
+        
+        // ASERCJA: Porównanie musi zwrócić 0 (są równe).
+        // To gwarantuje stabilność kolejki.
+        assertThat(o1.compareTo(o2)).isZero();
+    }
+}
