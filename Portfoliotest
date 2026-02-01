@@ -1,0 +1,17 @@
+    // --- TEST 4: SPRZEDAŻ WIELOPARTYJNA (Najważniejszy test FIFO) ---
+    // Sprawdza, czy algorytm umie pobrać akcje z dwóch różnych dostaw (Partii).
+    @Test
+    void fifo_ShouldCalculateCorrectProfit_ForMultiLotSale() {
+        // SETUP: Mamy 10 sztuk po 100 zł i 10 sztuk po 120 zł.
+        Portfolio p = setupPortfolioWithLots(); 
+        
+        // AKCJA: Sprzedajemy 15 sztuk po 150 zł.
+        // Algorytm musi wziąć: 10 szt. z pierwszej partii + 5 szt. z drugiej.
+        BigDecimal profit = p.sell("XYZ", 15, new BigDecimal("150"));
+        
+        // ASERCJA: 
+        // Zysk 1: 10 * (150 - 100) = 500
+        // Zysk 2: 5 * (150 - 120) = 150
+        // Suma: 650. Jeśli wyjdzie inna liczba, FIFO nie działa.
+        assertThat(profit).isEqualByComparingTo(new BigDecimal("650"));
+    }
