@@ -1,0 +1,165 @@
+import sys
+from collections import Counter
+
+class Solution:
+    # Standardowe częstotliwości występowania liter w języku angielskim (A-Z).
+    # Na przykład 0.08167 to ok. 8.1% dla litery 'A', a 0.12702 to 12.7% dla litery 'E'.
+    # Użyjemy tego do statystyki Chi-kwadrat, aby sprawdzić, czy odszyfrowany tekst "brzmi" po angielsku.
+    ENGLISH_FREQS = [
+        0.08167, 0.01492, 0.02782, 0.04253, 0.12702, 0.02228, 0.02015, 0.06094,
+        0.06966, 0.00153, 0.00772, 0.04025, 0.02406, 0.06749, 0.07507, 0.01929,
+        0.00095, 0.05987, 0.06327, 0.09056, 0.02758, 0.00978, 0.02360, 0.00150,
+        0.01974, 0.00074
+    ]
+
+    @staticmethod
+    def solve():
+        # Wczytujemy całe wejście z zachowaniem spacji, znaków interpunkcyjnych i wielkich liter.
+        raw_text = sys.stdin.read().strip()
+        if not raw_text:
+            return
+
+        # KROK 0: Przygotowanie tekstu do analizy statystycznej.
+        # Wyrzucamy spacje i znaki przestankowe, a litery zamieniamy na małe. 
+        # Dzięki temu matematyka nie "potknie się" o nielitery.
+        filtered_chars = [c.lower() for c in raw_text if c.isalpha()]
+        filtered_text = "".join(filtered_chars)
+        N = len(filtered_text) # Całkowita liczba liter w tekście
+
+        if N == 0:
+            print(raw_text)
+            print("")
+            return
+
+        # KROK 1: Test Kasiskiego - szukamy prawdopodobnych długości klucza.
+        # Skanujemy tekst w poszukiwaniu 3-literowych ciągów (trygramów) i zapisujemy ich pozycje.
+        trigrams = {}
+        for i in range(N - 2):
+            tri = filtered_text[i:i+3]
+            if tri not in trigrams:
+                trigrams[tri] = []
+            trigrams[tri].append(i)
+
+        factor_counts = Counter() # Zliczacz dzielników (jak często dana długość klucza "pasuje" do przerw)
+        
+        for tri, indices in trigrams.items():
+            # Interesują nas tylko trygramy, które powtórzyły się co najmniej 2 razy
+            if len(indices) >= 2:
+                # Badamy odległości między WSZYSTKIMI parami wystąpień danego trygramu
+                for i in range(len(indices)):
+                    for j in range(i + 1, len(indices)):
+                        dist = indices[j] - indices[i] # Odległość między powtórzeniami
+                        
+                        # Sprawdzamy dzielniki od 2 do 10 (zgodnie z limitem z zadania, że klucz <= 10)
+                        for k in range(2, 11):
+                            if dist % k == 0:
+                                factor_counts[k] += 1 # Znaleźliśmy potencjalną długość klucza!
+
+        # Układamy długości klucza od najbardziej do najmniej prawdopodobnej (Kasiski)
+        candidate_lengths = [k for k, count in factor_counts.most_common()]
+        
+        # Plan awaryjny: dodajemy pozostałe długości (1-10) na koniec listy, 
+        # na wypadek gdyby Test Kasiskiego się pomylił (co zdarza się przy bardzo krótkich tekstach).
+        for k in range(1, 11):
+            if k not in candidate_lengths:
+                candidate_lengths.append(k)
+
+        # Zmienne przechowujące dotychczasowego "zwycięzcę" wśród kluczy
+        best_key = ""
+        best_ic_diff = float('inf') # Początkowy błąd Indeksu Koincydencji ustawiony na nieskończoność
+
+        # KROK 2: Testujemy każdą potencjalną długość klucza L
+        for L in candidate_lengths:
+            current_key = ""
+            
+            # Dzielimy tekst na L kolumn (co L-tą literę)
+            columns = ["" for _ in range(L)]
+            for i, char in enumerate(filtered_text):
+                columns[i % L] += char
+            
+            # KROK 3: Analiza częstotliwości (Chi-Kwadrat) dla każdej kolumny z osobna
+            for col in columns:
+                col_len = len(col)
+                best_shift = 0
+                min_chi2 = float('inf') # Minimalny błąd statystyczny
+                
+                # Testujemy wszystkie 26 możliwości (klasyczny Bruteforce na szyfrze Cezara)
+                for shift in range(26):
+                    chi2 = 0.0
+                    shifted_counts = [0] * 26 # Tablica wystąpień liter A-Z dla danego przesunięcia
+                    
+                    # Odszyfrowujemy kolumnę testowym przesunięciem i zliczamy litery
+                    for c in col:
+                        decrypted_char_ord = (ord(c) - ord('a') - shift) % 26
+                        shifted_counts[decrypted_char_ord] += 1
+                    
+                    # Liczymy test statystyczny Chi-kwadrat
+                    for i in range(26):
+                        # Oczekiwana liczba wystąpień (Expected) = prawdopodobieństwo w j. ang * długość tekstu
+                        expected = Solution.ENGLISH_FREQS[i] * col_len
+                        # Rzeczywista liczba wystąpień po odszyfrowaniu (Observed)
+                        observed = shifted_counts[i]
+                        
+                        if expected > 0:
+                            # Sumujemy karę za rozbieżność: (Observed - Expected)^2 / Expected
+                            chi2 += ((observed - expected) ** 2) / expected
+                    
+                    # Jeśli ten błąd jest najmniejszy do tej pory, zapisujemy to przesunięcie jako najlepsze
+                    if chi2 < min_chi2:
+                        min_chi2 = chi2
+                        best_shift = shift
+                        
+                # Dodajemy odgadniętą literę (przesunięcie) do naszego hipotetycznego klucza
+                current_key += chr(best_shift + ord('a'))
+            
+            # KROK 4: Weryfikacja jakości całego klucza za pomocą Indeksu Koincydencji (IC)
+            # Odszyfrowujemy (tylko w pamięci) nasz odfiltrowany tekst używając zgadniętego klucza
+            decrypted_filtered = []
+            for i, c in enumerate(filtered_text):
+                shift = ord(current_key[i % L]) - ord('a')
+                dec_c = chr((ord(c) - ord('a') - shift) % 26 + ord('a'))
+                decrypted_filtered.append(dec_c)
+            
+            # Obliczamy Indeks Koincydencji dla odzyskanego tekstu
+            counts = Counter(decrypted_filtered)
+            if N > 1:
+                # Wzór: suma( n * (n-1) ) / ( N * (N-1) )
+                ic = sum(n * (n - 1) for n in counts.values()) / (N * (N - 1))
+            else:
+                ic = 0
+            
+            # Sprawdzamy, jak blisko jest do idealnego angielskiego tekstu (IC = 0.0667)
+            ic_diff = abs(ic - 0.0667)
+            # Jeśli ten klucz wygenerował lepszy angielski tekst niż poprzednie, zostaje nowym faworytem
+            if ic_diff < best_ic_diff:
+                best_ic_diff = ic_diff
+                best_key = current_key
+
+        # KROK 5: Ostateczne odszyfrowanie oryginalnego tekstu (z formatowaniem)
+        result = []
+        key_len = len(best_key)
+        key_idx = 0
+        
+        # Przechodzimy przez ORYGINALNY tekst (ze spacjami, wielkimi literami itd.)
+        for char in raw_text:
+            if char.isalpha():
+                # Obliczamy przesunięcie z naszego "Zwycięskiego Klucza"
+                shift = ord(best_key[key_idx % key_len]) - ord('a')
+                base = ord('a') if char.islower() else ord('A')
+                
+                # Deszyfrujemy, dbając o wielkość litery
+                dec_c = chr((ord(char) - base - shift + 26) % 26 + base)
+                result.append(dec_c)
+                
+                # Zużywamy literę z klucza
+                key_idx += 1
+            else:
+                # Kopiujemy nielitery (np. spacje) bez zmian i bez zużywania klucza
+                result.append(char)
+                
+        # Zgodnie z formatem wyjścia: najpierw tekst zdekodowany, nowa linia, potem odgadnięty klucz
+        print("".join(result))
+        print(best_key)
+
+if __name__ == '__main__':
+    Solution.solve()
