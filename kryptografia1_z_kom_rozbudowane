@@ -1,0 +1,272 @@
+import sys
+from collections import Counter
+
+# Prowadzący: Dlaczego to jest w klasie 'Solution'?
+# Odpowiedź: Bo taki jest wymóg platformy sprawdzającej, wymaga ona publicznej klasy 'Solution'.
+class Solution:
+    
+    # Prowadzący: Co to za liczby i skąd się wzięły?
+    # Odpowiedź: To statystyczne prawdopodobieństwa występowania liter w języku angielskim.
+    # Indeks 0 to litera 'A' (ok. 8.1%), indeks 4 to 'E' (12.7%). 
+    # Używam tego jako "wzorca" przy teście Chi-kwadrat, by ocenić, czy odzyskany tekst brzmi sensownie.
+    ENGLISH_FREQS = [
+        0.08167, 0.01492, 0.02782, 0.04253, 0.12702, 0.02228, 0.02015, 0.06094,
+        0.06966, 0.00153, 0.00772, 0.04025, 0.02406, 0.06749, 0.07507, 0.01929,
+        0.00095, 0.05987, 0.06327, 0.09056, 0.02758, 0.00978, 0.02360, 0.00150,
+        0.01974, 0.00074
+    ]
+
+    # @staticmethod oznacza, że funkcja należy do klasy, ale nie potrzebuje tworzenia obiektu tej klasy (self).
+    @staticmethod
+    def solve():
+        
+        # --- ETAP 0: PRZYGOTOWANIE DANYCH WEJŚCIOWYCH ---
+        
+        # Funkcja sys.stdin.read() wczytuje wszystko, co wpisał użytkownik (lub podał system testujący).
+        # .strip() usuwa ewentualne puste znaki (np. niepotrzebne entery) na samym początku i końcu tekstu.
+        raw_text = sys.stdin.read().strip()
+        
+        # Zabezpieczenie: jeśli wejście jest puste, kończymy program (return).
+        if not raw_text:
+            return
+
+        # Prowadzący: Dlaczego robisz 'filtered_text'? Po co to?
+        # Odpowiedź: Do analizy matematycznej (Kasiski, Chi-kwadrat) muszę mieć czysty ciąg liter.
+        # Spacje i kropki zaburzają odległości między trygramami i psują matematykę.
+        # W tej linijce (tzw. list comprehension):
+        # 1. c.isalpha() - sprawdza, czy znak jest literą alfabetu.
+        # 2. c.lower() - jeśli jest literą, zamienia ją na małą (żeby 'A' i 'a' traktować tak samo).
+        filtered_chars = [c.lower() for c in raw_text if c.isalpha()]
+        
+        # Łączymy listę znaków z powrotem w jeden "zbity" tekst (tzw. string), np. "almakota"
+        filtered_text = "".join(filtered_chars)
+        
+        # Funkcja len() zwraca długość tekstu (ilość znaków). Przechowujemy ją w zmiennej N.
+        N = len(filtered_text)
+
+        # Zabezpieczenie: jeśli tekst składał się tylko z cyfr i po filtracji nic nie zostało, wypisujemy go i kończymy.
+        if N == 0:
+            print(raw_text)
+            print("")
+            return
+
+        # --- ETAP 1: TEST KASISKIEGO (SZUKANIE DŁUGOŚCI KLUCZA) ---
+        
+        # Tworzymy pusty słownik {}. Będziemy w nim trzymać trygramy (np. 'abc') jako klucze, 
+        # a jako wartości - listy z indeksami (pozycjami), na których ten trygram wystąpił.
+        trigrams = {}
+        
+        # Prowadzący (haczyk!): Dlaczego w pętli jest N - 2, a nie N?
+        # Odpowiedź: Ponieważ wycinam pakiety po 3 litery (trygramy). 
+        # Gdybym doszedł do samej końcówki tekstu (N), spróbowałbym wyciąć 3 litery z miejsca,
+        # gdzie została już tylko 1 litera. Dostałbym błąd "Index Out of Bounds". 
+        # Odejmując 2, zatrzymuję pętlę idealnie w miejscu, gdzie mogę wyciąć ostatnie pełne 3 litery.
+        for i in range(N - 2):
+            
+            # filtered_text[i:i+3] wycina z tekstu 3 litery, zaczynając od indeksu 'i'.
+            tri = filtered_text[i:i+3]
+            
+            # Jeśli znaleźliśmy taki trygram po raz pierwszy, tworzymy dla niego pustą listę w słowniku.
+            if tri not in trigrams:
+                trigrams[tri] = []
+                
+            # Zapisujemy do listy pozycję (indeks 'i'), na której ten trygram został znaleziony.
+            trigrams[tri].append(i)
+
+        # Counter() to specjalne narzędzie z biblioteki 'collections', które samo zlicza, 
+        # ile punktów (głosów) zdobył dany dzielnik (długość klucza).
+        factor_counts = Counter()
+        
+        # Pętla iteruje po słowniku. 'tri' to nasz trygram (np. 'abc'), a 'indices' to lista jego pozycji (np. [0, 5, 10]).
+        for tri, indices in trigrams.items():
+            
+            # Interesują nas tylko te trygramy, które pojawiły się w tekście co najmniej 2 razy.
+            if len(indices) >= 2:
+                
+                # Zagnieżdżone pętle do obliczenia odległości między WSZYSTKIMI możliwymi parami wystąpień trygramu.
+                for i in range(len(indices)):
+                    
+                    # Prowadzący (haczyk!): Dlaczego 'j' zaczyna się od 'i + 1'? 
+                    # Odpowiedź: Aby nie liczyć odległości trygramu z nim samym (wtedy odległość wynosiłaby 0) 
+                    # oraz aby nie powtarzać tych samych par w odwróconej kolejności.
+                    for j in range(i + 1, len(indices)):
+                        
+                        # Różnica indeksów to odległość w tekście między dwoma takimi samymi trygramami.
+                        dist = indices[j] - indices[i]
+                        
+                        # Sprawdzamy wszystkie potencjalne długości klucza 'k' z przedziału od 2 do 10 (wymóg z polecenia).
+                        for k in range(2, 11):
+                            
+                            # Operator modulo (%). Jeśli dist dzieli się przez k bez reszty (reszta == 0), 
+                            # to znaczy, że k jest dzielnikiem naszej odległości.
+                            if dist % k == 0:
+                                # Dajemy 1 punkt (głos) dla tej konkretnej długości klucza 'k'.
+                                factor_counts[k] += 1
+
+        # Metoda .most_common() bierze nasz 'factor_counts' i zwraca listę ułożoną malejąco (od zwycięzcy do przegranego).
+        # Wyciągamy z niej tylko same klucze ('k'), a ilości głosów ignorujemy.
+        candidate_lengths = [k for k, count in factor_counts.most_common()]
+        
+        # "Plan awaryjny". Dodajemy do listy pozostałe liczby z zakresu 1-10.
+        # Robimy to dlatego, że w bardzo krótkich tekstach Test Kasiskiego może dać błędny wynik.
+        # W ten sposób program przetestuje faworytów, ale z braku laku sprawdzi też resztę.
+        for k in range(1, 11):
+            if k not in candidate_lengths:
+                candidate_lengths.append(k)
+
+        # Zmienne na "najlepszy wytypowany klucz" i jego "błąd".
+        best_key = ""
+        # float('inf') oznacza nieskończoność. Ustawiamy błąd na maksimum, aby każdy pierwszy wynik był od niego lepszy.
+        best_ic_diff = float('inf')
+
+        # --- ETAP 2: PODZIAŁ NA KOLUMNY (Dla każdej podejrzanej długości L) ---
+        
+        # Program NIE WIE jeszcze, która długość klucza jest prawidłowa. Dlatego testuje je w pętli.
+        for L in candidate_lengths:
+            # W tej zmiennej będziemy stopniowo budować hasło (np. 'T', potem 'A', aż wyjdzie 'TAJNE').
+            current_key = ""
+            
+            # Tworzymy tablicę (listę) zawierającą L pustych ciągów tekstowych. To są nasze "kolumny".
+            columns = ["" for _ in range(L)]
+            
+            # Prowadzący: Skąd są te litery, które wrzucasz do kolumn?
+            # Odpowiedź: Pochodzą prosto z zaszyfrowanego tekstu (szyfrogramu).
+            # Jeśli szyfrogram to "XYZXYZ" a L=3, to dzielę ten bełkot na 3 osobne bełkoty. 
+            # Funkcja enumerate() daje mi literę (char) i jej pozycję (i).
+            for i, char in enumerate(filtered_text):
+                # Modulo (i % L) działa jak krupier rozdający karty. 
+                # Jeśli L=3, to litery trafiają do wiaderka nr: 0, 1, 2, 0, 1, 2, 0...
+                columns[i % L] += char
+            
+            # --- ETAP 3: ANALIZA CZĘSTOTLIWOŚCI (Chi-Kwadrat) ---
+            # Dzięki kolumnom zamieniliśmy jednego trudnego Vigenère'a na L prostych szyfrów Cezara.
+            
+            # Bierzemy po kolei każdą z kolumn...
+            for col in columns:
+                col_len = len(col) # Ile liter jest w tej konkretnej kolumnie
+                best_shift = 0     # Zmienna na cyfrę oznaczającą najlepsze przesunięcie (literę klucza)
+                min_chi2 = float('inf') # Zmienna na najmniejszy błąd (karę punktową)
+                
+                # Program brutalnie sprawdza wszystkie 26 możliwości (przesunięcia od 0 do 25, czyli od 'A' do 'Z').
+                for shift in range(26):
+                    chi2 = 0.0
+                    
+                    # Tablica 26 zer. Będziemy tu zliczać, ile razy wystąpiło 'a', 'b', 'c'... po odszyfrowaniu.
+                    shifted_counts = [0] * 26
+                    
+                    # Przechodzimy przez każdą zaszyfrowaną literę (c) w tej kolumnie.
+                    for c in col:
+                        # ODSZYFROWANIE (Testowe).
+                        # ord(c) zamienia literę na jej kod (np. 97 dla 'a').
+                        # Odejmując ord('a') sprowadzamy to do skali 0-25.
+                        # Odejmujemy nasz testowany 'shift' (bo deszyfrujemy), 
+                        # a '% 26' dba o to, by zapętlić alfabet, jeśli wynik będzie ujemny.
+                        decrypted_char_ord = (ord(c) - ord('a') - shift) % 26
+                        
+                        # Zliczamy (dajemy punkt) dla tej odszyfrowanej litery.
+                        shifted_counts[decrypted_char_ord] += 1
+                    
+                    # Oceniamy, jak dobry angielski uzyskaliśmy z tego testowego przesunięcia (Test Chi-kwadrat).
+                    for i in range(26):
+                        # expected (oczekiwane) = wzorcowy procent z j. angielskiego * ilość liter w kolumnie.
+                        expected = Solution.ENGLISH_FREQS[i] * col_len
+                        # observed (zaobserwowane) = to, co fizycznie naliczyliśmy wyżej w 'shifted_counts'.
+                        observed = shifted_counts[i]
+                        
+                        if expected > 0:
+                            # Główny wzór Chi-kwadrat. Oblicza różnicę między oczekiwaniem a rzeczywistością.
+                            # Wynik to "kara" - im większa różnica, tym większą liczbę dodajemy do 'chi2'.
+                            chi2 += ((observed - expected) ** 2) / expected
+                    
+                    # Jeśli kara punktowa dla tego przesunięcia jest mniejsza niż wszystko, co widzieliśmy wcześniej...
+                    if chi2 < min_chi2:
+                        min_chi2 = chi2     # ...aktualizujemy najmniejszą karę
+                        best_shift = shift  # ...i zapisujemy, że to przesunięcie jest aktualnym liderem.
+                        
+                # Zamieniamy wygraną cyfrę (np. 3) z powrotem na literę ('d') i doklejamy do naszego hasła.
+                current_key += chr(best_shift + ord('a'))
+            
+            # --- ETAP 4: WERYFIKACJA (INDEKS KOINCYDENCJI) ---
+            # Prowadzący: Dlaczego to jest potrzebne?
+            # Odpowiedź: Ponieważ dla L=3 otrzymałem jakiś klucz (np. "KOT"), ale dla L=5 mam inny (np. "PIESX").
+            # Etap 4 to "sąd ostateczny", w którym komputer decyduje, który z tych wygenerowanych kluczy ma najwięcej sensu.
+            # Wykonuję tu "próbne odszyfrowanie na brudnopisie" (bez spacji i dużych liter), aby poddać wynik ocenie.
+            
+            decrypted_filtered = []
+            for i, c in enumerate(filtered_text):
+                # Odszyfrowujemy cały (przefiltrowany) tekst w pamięci komputera.
+                shift = ord(current_key[i % L]) - ord('a')
+                dec_c = chr((ord(c) - ord('a') - shift) % 26 + ord('a'))
+                decrypted_filtered.append(dec_c)
+            
+            # Zliczamy litery w tym odszyfrowanym tekście.
+            counts = Counter(decrypted_filtered)
+            if N > 1:
+                # Obliczamy Indeks Koincydencji. To matematyczne prawdopodobieństwo wylosowania 2 takich samych liter.
+                ic = sum(n * (n - 1) for n in counts.values()) / (N * (N - 1))
+            else:
+                ic = 0
+            
+            # Prowadzący: Do czego tu służy 'abs'?
+            # Odpowiedź: Idealny język angielski ma Indeks Koincydencji równy ok. 0.0667. 
+            # Funkcja abs() zwraca wartość bezwzględną (usuwa znak minus). 
+            # Obliczam za jej pomocą "odległość" (błąd) mojego tekstu od ideału 0.0667. 
+            ic_diff = abs(ic - 0.0667)
+            
+            # Jeśli ten klucz sprawił, że otrzymany tekst jest bliższy ideałowi niż poprzednie badane klucze...
+            if ic_diff < best_ic_diff:
+                best_ic_diff = ic_diff  # ...aktualizujemy rekord
+                best_key = current_key  # ...i oznaczamy ten klucz jako ABSOLUTNEGO ZWYCIĘZCĘ.
+
+        # --- ETAP 5: FINAŁOWE ODSZYFROWANIE (CZYSZTOTOPIS) ---
+        # Prowadzący: Dlaczego znowu coś odszyfrowujesz, skoro zrobiłeś to w Kroku 4?
+        # Odpowiedź: W Kroku 4 pracowałem na 'brudnopisie' (tylko małe litery, brak spacji), by ułatwić zadanie matematyce.
+        # W Kroku 5 biorę zwycięski klucz ('best_key') i pracuję na ORYGINALNYM tekście wejściowym ('raw_text').
+        # Chcę stworzyć poprawnie sformatowany wynik ze spacjami i znakami interpunkcyjnymi dla użytkownika.
+        
+        result = []
+        key_len = len(best_key)
+        key_idx = 0 # Ten licznik pilnuje, przy której literze hasła jesteśmy.
+        
+        # Iterujemy znak po znaku po oryginalnym szyfrogramie.
+        for char in raw_text:
+            
+            # Przetwarzamy ZNAK TYLKO WTEDY, GDY JEST LITERĄ.
+            if char.isalpha():
+                
+                # Używamy operatora modulo (key_idx % key_len), by hasło się zapętlało (np. 0,1,2, 0,1,2).
+                shift = ord(best_key[key_idx % key_len]) - ord('a')
+                
+                # Prowadzący (haczyk!): Co to jest 'base'? Po co Ci tu duże A i małe a?
+                # Odpowiedź: Komputer nie rozumie liter, operuje na kodach ASCII. Małe 'a' to liczba 97, duże 'A' to 65.
+                # Wzór matematyczny działa poprawnie tylko dla wartości 0-25. 
+                # Zmienna 'base' działa jak kotwica. Odejmując bazę 97 (dla małych) lub 65 (dla dużych),
+                # sprowadzam literę do poziomu "0" przed wykonaniem działań, a na koniec dodaję ją z powrotem.
+                # Dzięki instrukcji 'islower()' program wie, jakiej bazy użyć, i zachowuje oryginalną wielkość liter!
+                base = ord('a') if char.islower() else ord('A')
+                
+                # 1. ord(char) - base => sprowadza znak do zakresu 0-25.
+                # 2. - shift          => cofa literę w alfabecie o wartość z klucza.
+                # 3. + 26             => dodajemy 26, aby zabezpieczyć się przed liczbami ujemnymi przed użyciem modulo.
+                # 4. % 26             => upewnia się, że nie wyjdziemy poza alfabet (zachowanie okrężne).
+                # 5. + base           => zamienia z powrotem liczbę 0-25 na poprawny kod ASCII (dużą lub małą literę).
+                dec_c = chr((ord(char) - base - shift + 26) % 26 + base)
+                
+                # Doklejamy ładnie odszyfrowaną literę do wyniku.
+                result.append(dec_c)
+                
+                # Ważne: Przesuwamy licznik klucza dalej, BO przetworzyliśmy literę.
+                key_idx += 1
+                
+            else:
+                # Jeśli to spacja, przecinek, cyfra - po prostu przepisujemy znak do wyniku (result).
+                # UWAGA: Wskaźnik klucza (key_idx) stoi w miejscu i "czeka". Nie dodajemy do niego +1!
+                result.append(char)
+                
+        # Zgodnie z formatem wyjściowym zadania: drukujemy złożony, czysty tekst, a pod spodem wypisujemy odgadnięty klucz.
+        print("".join(result))
+        print(best_key)
+
+# Wywołanie głównej funkcji programu, jeśli plik jest uruchamiany bezpośrednio.
+if __name__ == '__main__':
+    Solution.solve()
