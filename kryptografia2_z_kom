@@ -1,0 +1,123 @@
+import sys
+
+def parse_cipher(cipher_str):
+    # Funkcja pomocnicza: jej jedynym zadaniem jest zamiana "brzydkiego" tekstu 
+    # z ucieczkami (np. \x0a, \n) na czystą listę liczb (bajtów).
+    i = 0
+    res = []
+    
+    # Przechodzimy przez każdy znak w podanym ciągu
+    while i < len(cipher_str):
+        # Sprawdzamy, czy obecny znak to ukośnik (sygnalizuje to znak specjalny)
+        if cipher_str[i] == '\\':
+            # Upewniamy się, że po ukośniku jest jeszcze jakiś znak
+            if i + 1 < len(cipher_str):
+                next_c = cipher_str[i+1]
+                
+                if next_c == 'x':
+                    # Mamy format szesnastkowy \xNN.
+                    # Pobieramy dwa kolejne znaki (czyli nasze 'NN') i zamieniamy 
+                    # z systemu szesnastkowego (base 16) na zwykłą liczbę całkowitą (int).
+                    hex_val = cipher_str[i+2:i+4]
+                    res.append(int(hex_val, 16))
+                    i += 4  # Przeskakujemy o 4 pozycje (bo zużyliśmy znaki '\', 'x', 'N', 'N')
+                    
+                elif next_c == 'n':
+                    res.append(10)  # Kod ASCII dla nowej linii
+                    i += 2
+                elif next_c == 't':
+                    res.append(9)   # Kod ASCII dla tabulacji
+                    i += 2
+                elif next_c == 'r':
+                    res.append(13)  # Kod ASCII dla powrotu karetki
+                    i += 2
+                elif next_c == '\\':
+                    res.append(92)  # Kod ASCII dla samego ukośnika
+                    i += 2
+                else:
+                    # Jeśli po ukośniku była inna litera, po prostu ją dodajemy
+                    res.append(ord(next_c))
+                    i += 2
+            else:
+                # Ukośnik był na samym końcu tekstu, traktujemy go jako zwykły znak
+                res.append(ord('\\'))
+                i += 1
+        else:
+            # Zwykła litera/cyfra. Zamieniamy ją na kod ASCII i dodajemy do listy.
+            res.append(ord(cipher_str[i]))
+            i += 1
+            
+    # Zwracamy czystą tablicę liczb (bajtów), gotową do operacji matematycznych
+    return res
+
+
+def decrypt_n_ciphers():
+    # Odczytujemy wszystkie linie wprowadzone do programu
+    input_data = sys.stdin.read().splitlines()
+    
+    # Zabezpieczenie przed brakiem danych
+    if len(input_data) < 4:
+        return
+        
+    # --- KROK 1: POBRANIE DANYCH WEJŚCIOWYCH ---
+    # Linia 1: długość klucza (np. 3)
+    k_len = int(input_data[0])
+    
+    # Linia 2: znany fragment (prefiks) pierwszej wiadomości (np. "hel")
+    # Wiemy z polecenia, że ma on dokładnie długość k_len.
+    p1_prefix = input_data[1]
+    
+    # Linia 3: liczba zaszyfrowanych wiadomości
+    n = int(input_data[2])
+    
+    # Linie od 4 w dół: Odcinamy z wejścia same szyfrogramy i zapisujemy do listy
+    c_strings = input_data[3 : 3 + n]
+    
+    
+    # --- KROK 2: ODTWORZENIE PEŁNEGO KLUCZA ---
+    # Bierzemy pierwszą zakodowaną wiadomość (C1) i przepuszczamy ją przez nasz parser.
+    # Dzięki temu mamy ją jako listę liczb (bajtów).
+    c1_bytes = parse_cipher(c_strings[0])
+    
+    # Tu będziemy trzymać odkryte wartości naszego klucza
+    key = []
+    
+    # Iterujemy dokładnie tyle razy, ile znaków ma klucz (k_len).
+    for i in range(k_len):
+        # Odtwarzamy i-ty bajt klucza: K[i] = C1[i] XOR P1[i]
+        # Bierzemy i-tą liczbę z pierwszego szyfrogramu oraz kod ASCII (ord) z i-tej 
+        # litery znanego prefiksu.
+        key_byte = c1_bytes[i] ^ ord(p1_prefix[i])
+        
+        # Dodajemy odkryty fragment klucza do naszej listy
+        key.append(key_byte)
+        
+        
+    # --- KROK 3: ODSZYFROWANIE WSZYSTKICH WIADOMOŚCI (N) ---
+    # Skoro mamy już pełny klucz w liście 'key', przechodzimy pętlą po 
+    # każdym kolejnym szyfrogramie zapisanym w 'c_strings'.
+    for c_str in c_strings:
+        # Ponownie używamy parsera do zamiany tekstu na liczby
+        c_bytes = parse_cipher(c_str)
+        
+        # Tutaj będziemy zbierać rozszyfrowane literki dla bieżącej wiadomości
+        plaintext_chars = []
+        
+        # Przechodzimy przez każdy poszczególny znak (bajt) wewnątrz jednej wiadomości
+        for j in range(len(c_bytes)):
+            # Klucz jest krótszy niż wiadomość, więc musi się zapętlać.
+            # Wyrażenie 'j % k_len' (reszta z dzielenia) gwarantuje, że indeksy klucza
+            # wracają do 0, gdy przekroczymy jego długość.
+            # Robimy XOR (^) i od razu zamieniamy wynik-liczbę na znak funkcją chr().
+            p_char = chr(c_bytes[j] ^ key[j % k_len])
+            
+            # Dorzucamy znak do listy rozszyfrowanego tekstu
+            plaintext_chars.append(p_char)
+            
+        # Gdy zewnętrzna pętla przerobi całą wiadomość, łączymy listę pojedynczych
+        # znaków w jeden ładny tekst (za pomocą join) i wypisujemy na ekran.
+        print("".join(plaintext_chars))
+
+# Uruchomienie głównej funkcji, jeśli skrypt jest wywołany bezpośrednio
+if __name__ == "__main__":
+    decrypt_n_ciphers()
