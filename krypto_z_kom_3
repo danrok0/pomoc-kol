@@ -1,0 +1,259 @@
+import os
+import re # Moduł wyrażeń regularnych, przyda nam się do łatwego usuwania komentarzy z pliku
+
+# =====================================================================
+# 1. BAZA KRYPTOGRAFICZNA (Uproszczony algorytm MiniDES)
+# =====================================================================
+
+# S-Boxy to tablice podstawień (Substitution Boxes). 
+# Są to jedyne nieliniowe (czyli wprowadzające "chaos") elementy szyfru.
+# Zamieniają 4-bitowe wejście na 3-bitowe wyjście według z góry ustalonej tabeli.
+SBOX1 = ["101","010","001","110","011","100","111","000","001","100","110","010","000","111","101","011"]
+SBOX2 = ["100","000","110","101","111","001","011","010","101","011","000","111","110","010","001","100"]
+
+def xor(s1, s2):
+    """
+    Funkcja wykonująca logiczną operację XOR (Alternatywa wykluczająca) na dwóch ciągach bitów.
+    Zasada XOR: 
+    0 XOR 0 = 0
+    1 XOR 1 = 0
+    0 XOR 1 = 1
+    1 XOR 0 = 1
+    Zwraca '1', jeśli bity na tej samej pozycji (a i b) są RÓŻNE, w przeciwnym razie '0'.
+    """
+    return ''.join('1' if a != b else '0' for a, b in zip(s1, s2))
+
+def minides_block(block, key, ep, rounds=8, decrypt=False):
+    """
+    Szyfruje lub deszyfruje JEDEN blok danych (dokładnie 12 bitów).
+    Działa to na zasadzie Sieci Feistela.
+    """
+    # KROK 1: Podział bloku wejściowego 12-bitowego na dwie równe połowy: Lewą (L) i Prawą (R).
+    # block[:6] bierze bity od indeksu 0 do 5. block[6:] bierze od 6 do końca.
+    L, R = block[:6], block[6:]
+    
+    # KROK 2: Generowanie kluczy dla każdej rundy (tzw. Key Schedule).
+    # W MiniDES klucz rundy to po prostu główny klucz przesunięty cyklicznie w lewo.
+    # W pętli tworzymy listę 'keys', gdzie każdy kolejny klucz jest obrócony o 'i' pozycji.
+    keys = [(key[i%len(key):] + key[:i%len(key)]) for i in range(1, rounds + 1)]
+    
+    # Jeśli deszyfrujemy, musimy użyć dokładnie tych samych kluczy, ale w ODWROTNEJ kolejności (od tyłu).
+    if decrypt: 
+        keys = keys[::-1] 
+    
+    # KROK 3: Pętla rund. Wykonujemy operacje tyle razy, ile mamy rund (domyślnie 8).
+    for k in keys:
+        # a) Permutacja rozszerzająca (Expansion Permutation - EP).
+        # Bierzemy 6 bitów prawej połowy (R) i "rozciągamy" je do 8 bitów na podstawie wzoru 'ep'.
+        er = ''.join(R[int(idx)] for idx in ep)
+        
+        # b) XOR rozszerzonego R z kluczem aktualnej rundy (k). Wynik ma 8 bitów.
+        x = xor(er, k)
+        
+        # c) S-Boxy (Podstawienie).
+        # Dzielimy 8 bitów z poprzedniego kroku na dwa kawałki po 4 bity: x[:4] oraz x[4:].
+        # Zamieniamy te 4-bitowe ciągi na liczby dziesiętne za pomocą int(..., 2).
+        # Używamy tych liczb jako indeksów, aby wyciągnąć nowe 3-bitowe wartości z SBOX1 i SBOX2.
+        # Łączymy je, tworząc 6-bitowy wynik funkcji (f_res).
+        f_res = SBOX1[int(x[:4], 2)] + SBOX2[int(x[4:], 2)]
+        
+        # d) Zamiana połówek (Feistel Swap).
+        # Nowe Lewe (L) to po prostu stare Prawe (R).
+        # Nowe Prawe (R) to (stare Lewe XOR wynik funkcji z kroku C).
+        L, R = R, xor(L, f_res)
+        
+    # KROK 4: Po ostatniej rundzie łączymy R i L (w odwrotnej kolejności: R + L zgodnie ze schematem Feistela).
+    return R + L
+
+# =====================================================================
+# 2. OBSŁUGA PLIKU GRAFICZNEGO (.PBM w trybie tekstowym P1)
+# =====================================================================
+
+def read_pbm_p1(filepath):
+    """Odczytuje nagłówek pliku i wyciąga z niego ciąg bitów (piksele)."""
+    with open(filepath, 'r') as f:
+        content = f.read()
+    
+    # Pliki .pbm często tworzą programy, które dodają komentarze np. "# Stworzono w GIMP".
+    # Komentarze psują szyfrowanie, więc wyrzucamy wszystko co zaczyna się od '#' do końca linii.
+    content = re.sub(r'#.*', '', content)
+    
+    # Dzielimy cały plik na słowa (kawałki oddzielone spacjami/enterami)
+    tokens = content.split()
+    
+    # Sprawdzamy, czy to na pewno dobry format
+    if not tokens or tokens[0] != 'P1':
+        raise ValueError("BŁĄD: Plik nie jest w formacie tekstowym P1!")
+    
+    width = tokens[1]  # Szerokość obrazka (w pikselach)
+    height = tokens[2] # Wysokość obrazka (w pikselach)
+    
+    # Tokeny od indeksu 3 do końca to same piksele ('0' lub '1').
+    # Sklejamy je w jeden dłuuuuugi sznurek (string) bitów.
+    data_bits = ''.join(tokens[3:]) 
+    
+    # Przygotowujemy czysty nagłówek, który przylepimy z powrotem po zaszyfrowaniu.
+    header = f"P1\n{width} {height}\n"
+    return header, data_bits
+
+def write_pbm_p1(filepath, header, data_bits):
+    """Zapisuje zaszyfrowane lub odszyfrowane dane jako nowy plik obrazka."""
+    with open(filepath, 'w') as f:
+        f.write(header) # Najpierw piszemy nienaruszony nagłówek (żeby przeglądarka to odczytała jako obrazek)
+        
+        # Standard .pbm nakazuje, by linijki nie były dłuższe niż 70 znaków.
+        # Dlatego dzielimy nasz dłuuuuugi sznurek bitów i zapisujemy po 70 znaków + Enter ('\n').
+        for i in range(0, len(data_bits), 70):
+            f.write(data_bits[i:i+70] + '\n')
+
+# =====================================================================
+# 3. TRYBY PRACY SZYFRU (Jak radzimy sobie z danymi dłuższymi niż 12 bitów)
+# =====================================================================
+
+def process_ecb(data, key, ep, rounds=8, decrypt=False):
+    """
+    Tryb ECB (Electronic Codebook). Najprostszy tryb.
+    Każdy 12-bitowy kawałek pliku jest szyfrowany OSOBNO, niezależnie od innych.
+    Dlatego ten tryb nie ukrywa wzorców (jak np. kontury sylwetki Waszyngtona).
+    """
+    # "Problem niewyrównanych bloków": Ucinamy resztę bitów, która nie dzieli się na równe "paczki" po 12.
+    usable_len = (len(data) // 12) * 12
+    res = ""
+    
+    # Skaczemy po naszych danych co 12 bitów.
+    for i in range(0, usable_len, 12):
+        block = data[i:i+12] # Wyciągamy jeden blok
+        res += minides_block(block, key, ep, rounds, decrypt) # Szyfrujemy go i doklejamy do wyniku
+    return res
+
+def process_cbc(data, key, ep, iv, rounds=8, decrypt=False):
+    """
+    Tryb CBC (Cipher Block Chaining). Szyfrowanie łańcuchowe.
+    Każdy blok "miesza się" z wynikiem szyfrowania poprzedniego bloku.
+    Dzięki temu identyczne fragmenty obrazka wyglądają na zaszyfrowanym pliku jak losowy szum.
+    """
+    usable_len = (len(data) // 12) * 12
+    res = ""
+    
+    # Wektor Inicjujący (IV). Służy do "zamieszania" przy PIERWSZYM bloku (bo on nie ma swojego poprzednika).
+    prev_c = iv 
+    
+    for i in range(0, usable_len, 12):
+        block = data[i:i+12]
+        
+        if not decrypt: # Jeśli SZYFRUJEMY
+            # Krok 1 w CBC: Robimy XOR czystego bloku z poprzednim zaszyfrowanym blokiem (lub z IV).
+            xored = xor(block, prev_c)
+            # Krok 2: Szyfrujemy wynik.
+            c_block = minides_block(xored, key, ep, rounds, False)
+            res += c_block     # Doklejamy do wyniku
+            prev_c = c_block   # Ten zaszyfrowany blok staje się "poprzednim" dla następnego obiegu pętli.
+            
+        else: # Jeśli DESZYFRUJEMY
+            # Krok 1 w CBC: Najpierw przepuszczamy szyfrogram przez MiniDES (deszyfrowanie).
+            decrypted_part = minides_block(block, key, ep, rounds, True)
+            # Krok 2: Wynik robimy XOR z poprzednim zaszyfrowanym blokiem (lub z IV).
+            p_block = xor(decrypted_part, prev_c)
+            res += p_block     # Doklejamy czysty tekst do wyniku
+            prev_c = block     # W deszyfrowaniu "poprzednim" jest oryginalny, niezmodyfikowany szyfrogram (block).
+    return res
+
+def process_ctr(data, key, ep, rounds=8):
+    """
+    Tryb CTR (Counter). Zmienia szyfr blokowy w szyfr strumieniowy.
+    Nie szyfrujemy w ogóle danych pliku! Szyfrujemy zwykły licznik (0, 1, 2, 3...).
+    Wynik szyfrowania licznika używamy jak "maski", którą nakładamy (XOR) na plik.
+    W tym trybie Szyfrowanie i Deszyfrowanie działa IDENTYCZNIE (po prostu nakładasz tę samą maskę dwa razy).
+    """
+    usable_len = (len(data) // 12) * 12
+    res = ""
+    
+    for i in range(0, usable_len, 12):
+        block = data[i:i+12]
+        
+        # 'i' to numer pierwszego bitu w bloku (np. 0, 12, 24).
+        # Dzieląc 'i // 12' otrzymujemy numer bloku (0, 1, 2, 3...).
+        # format(liczba, '012b') zamienia tę liczbę na 12-bitowy zapis binarny (np. 1 to '000000000001').
+        ctr_bin = format(i // 12, '012b') 
+        
+        # Szyfrujemy sam LICZNIK. Powstaje pseudolosowa maska.
+        enc_ctr = minides_block(ctr_bin, key, ep, rounds, False)
+        
+        # Nakładamy maskę (XOR) na nasz czysty blok danych.
+        res += xor(block, enc_ctr)
+    return res
+
+# =====================================================================
+# 4. EKSPERYMENT (Atak Bit-Flipping)
+# =====================================================================
+
+def flip_one_bit(data_bits):
+    """
+    Symuluje błąd przy przesyłaniu pliku lub atak hakera.
+    Zmienia ('odwraca') dokładnie JEDEN bit w samym środku zaszyfrowanego pliku.
+    """
+    idx = len(data_bits) // 2 # Szukamy środkowego indeksu
+    
+    # Jeśli na tym miejscu jest '0', robimy z niego '1'. Jeśli '1', robimy '0'.
+    flipped = '1' if data_bits[idx] == '0' else '0'
+    
+    # Sklejamy to w nowy ciąg: wszystko PRZED zepsutym bitem + zepsuty bit + wszystko PO zepsutym bicie.
+    return data_bits[:idx] + flipped + data_bits[idx+1:]
+
+# =====================================================================
+# 5. GŁÓWNA SEKWENCJA (To wykona się po odpaleniu programu)
+# =====================================================================
+if __name__ == "__main__":
+    
+    INPUT_FILE = "w1.pbm" # Nazwa Twojego pliku wejściowego
+    
+    # Parametry z Twojego zadania
+    KEY = "10101010"
+    EP = "01323245"
+    IV = "111011010010"
+    ROUNDS = 8 
+
+    # Sprawdzenie, czy plik istnieje w folderze, aby program nie "wybuchł" dziwnym błędem.
+    if not os.path.exists(INPUT_FILE):
+        print(f"BRAK PLIKU! Upewnij się, że '{INPUT_FILE}' jest w tym samym folderze co skrypt.")
+        exit(1)
+
+    print(f"[*] Wczytuję plik: {INPUT_FILE}")
+    header, plain_data = read_pbm_p1(INPUT_FILE)
+    
+    # Ostateczne odcięcie bitów-resztek, które nie formują pełnego bloku 12-bitowego
+    plain_data = plain_data[:(len(plain_data) // 12) * 12]
+
+    # --- KROK 1: SZYFROWANIE (Spodziewamy się szumu dla CBC i CTR, a w ECB zarysu twarzy) ---
+    print("[*] Szyfrowanie ECB...")
+    enc_ecb = process_ecb(plain_data, KEY, EP, ROUNDS, decrypt=False)
+    write_pbm_p1("1_ECB_Zaszyfrowany.pbm", header, enc_ecb)
+    
+    print("[*] Szyfrowanie CBC...")
+    enc_cbc = process_cbc(plain_data, KEY, EP, IV, ROUNDS, decrypt=False)
+    write_pbm_p1("2_CBC_Zaszyfrowany.pbm", header, enc_cbc)
+    
+    print("[*] Szyfrowanie CTR...")
+    enc_ctr = process_ctr(plain_data, KEY, EP, ROUNDS)
+    write_pbm_p1("3_CTR_Zaszyfrowany.pbm", header, enc_ctr)
+
+    # --- KROK 2: ATAK (Uszkadzamy po 1 bicie w każdym zaszyfrowanym obrazku) ---
+    print("[*] Wykonuję atak bit-flipping (psucie 1 bitu w szyfrogramach)...")
+    broken_ecb = flip_one_bit(enc_ecb)
+    broken_cbc = flip_one_bit(enc_cbc)
+    broken_ctr = flip_one_bit(enc_ctr)
+
+    # --- KROK 3: DESZYFROWANIE USZKODZONYCH (Tutaj zobaczysz PROPAGACJĘ BŁĘDÓW) ---
+    print("[*] Odszyfrowywanie zepsutego ECB...")
+    dec_broken_ecb = process_ecb(broken_ecb, KEY, EP, ROUNDS, decrypt=True)
+    write_pbm_p1("4_ECB_Zepsuty.pbm", header, dec_broken_ecb)
+
+    print("[*] Odszyfrowywanie zepsutego CBC...")
+    dec_broken_cbc = process_cbc(broken_cbc, KEY, EP, IV, ROUNDS, decrypt=True)
+    write_pbm_p1("5_CBC_Zepsuty.pbm", header, dec_broken_cbc)
+
+    print("[*] Odszyfrowywanie zepsutego CTR...")
+    dec_broken_ctr = process_ctr(broken_ctr, KEY, EP, ROUNDS) # Pamiętaj: w CTR szyfrowanie to to samo co deszyfrowanie!
+    write_pbm_p1("6_CTR_Zepsuty.pbm", header, dec_broken_ctr)
+
+    print("\n[GOTOWE] Sprawdź wygenerowane obrazy!")
