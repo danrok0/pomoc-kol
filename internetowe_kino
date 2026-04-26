@@ -1,0 +1,634 @@
+//html
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kino "JavaScript" - Rezerwacja Miejsc</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        
+        <header>
+            <h1>Kino "JavaScript"</h1>
+            <p>Profesjonalny system rezerwacji biletów</p>
+        </header>
+
+        <div id="messages" class="messages hidden"></div>
+
+        <main class="app-grid">
+            
+            <section class="cinema-section">
+                <div class="screen">EKRAN KINOWY</div>
+                
+                <div id="seats-container" class="seats-container"></div>
+                
+                <div class="legend">
+                    <div class="legend-item"><div class="seat-sample free"></div> Wolne</div>
+                    <div class="legend-item"><div class="seat-sample selected"></div> Wybrane</div>
+                    <div class="legend-item"><div class="seat-sample reserved"></div> Zarezerwowane</div>
+                </div>
+            </section>
+
+            <section class="control-panel">
+                
+                <div class="stats-box">
+                    <h3>Statystyki</h3>
+                    <p>Wolne miejsca: <span id="stat-free">0</span></p>
+                    <p>Wybrane miejsca: <span id="stat-selected">0</span></p>
+                    <p>Zarezerwowane miejsca: <span id="stat-reserved">0</span></p>
+                    <hr style="margin: 10px 0; border: 0; border-top: 1px solid #444;">
+                    <p class="price">Do zapłaty: <span id="stat-price">0</span> zł</p>
+                </div>
+
+                <form id="reservation-form" class="reservation-form">
+                    <h3>Rezerwacja</h3>
+                    
+                    <div class="form-group">
+                        <label for="name">Imię i nazwisko rezerwującego:</label>
+                        <input type="text" id="name" placeholder="np. Jan Kowalski" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Dostosuj bilety (max 5):</label>
+                        <div id="dynamic-ticket-types" class="dynamic-tickets-container">
+                            <p class="placeholder-text">Wybierz miejsca na sali, aby przypisać im bilety.</p>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submit-btn" class="btn btn-primary">Zatwierdź rezerwację</button>
+                </form>
+
+                <div id="cancel-panel" class="cancel-panel hidden">
+                    <h3>Zarządzanie rezerwacją</h3>
+                    <p>Wybrano miejsce nr: <strong id="cancel-seat-number">Brak</strong></p>
+                    <p>Rezerwacja na: <strong id="cancel-seat-owner">-</strong></p>
+                    <p>Typ biletu: <span id="cancel-ticket-type">-</span></p>
+                    <button id="cancel-btn" class="btn btn-danger">Anuluj tę rezerwację</button>
+                </div>
+
+                <div class="extra-options">
+                    <button id="reset-cinema-btn" class="btn btn-outline">🗑️ Resetuj całą salę (Wyczyść pamięć)</button>
+                </div>
+
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
+//css
+
+/* === 1. ZMIENNE GLOBALNE (CUSTOM PROPERTIES) === 
+   Zmienne zaczynają się od '--' i są zapisane w ':root' (głównym korzeniu dokumentu).
+   Dzięki nim w całym kodzie odwołujemy się do nazwy zmiennej (np. var(--seat-free)).
+   Zaleta: by zmienić kolor wszystkich wolnych miejsc, zmieniamy jedną linijkę kodu poniżej. */
+:root {
+    --bg-color: #1a1a24;
+    --panel-bg: #262635;
+    --text-color: #e0e0e0;
+    --seat-free: #535c68;
+    --seat-selected: #2ecc71;
+    --seat-reserved: #e74c3c;
+    --seat-armrest: rgba(0, 0, 0, 0.4);
+    --screen-color: #3498db;
+}
+
+/* === 2. RESET PRZEGLĄDARKI === 
+   Gwiazdka (*) celuje w każdy element na stronie. 
+   'box-sizing: border-box' gwarantuje, że paddingi (marginesy wewnętrzne) i border (ramka) 
+   nie powiększą zdefiniowanej szerokości elementu. Wciskają się one do środka, zamiast rozpychać. */
+* { 
+    box-sizing: border-box; 
+    margin: 0; 
+    padding: 0; 
+}
+
+/* Ustawienia typografii i tła dla całego widoku */
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6; /* Interlinia - tekst ma "więcej oddechu" */
+}
+
+/* Główny kontener centrujący widok na środku. 
+   'margin: 0 auto' daje margines auto po bokach, co idealnie środkuje go w przeglądarce. */
+.container { 
+    max-width: 1050px; 
+    margin: 0 auto; 
+    padding: 20px; 
+}
+
+/* === 3. TYPOGRAFIA NAGŁÓWKÓW === */
+header { text-align: center; margin-bottom: 30px; }
+header h1 { 
+    color: var(--seat-selected); 
+    text-transform: uppercase; /* Zmienia wszystkie małe litery na WIELKIE */
+    letter-spacing: 2px; /* Rozstrzela litery od siebie */
+    font-size: 3.5rem; 
+    /* Efekt 'neonowego' blasku pod tekstem. Składa się z przesunięcia X(0), Y(4px), rozmycia(10px) i koloru RGBa */
+    text-shadow: 0 4px 10px rgba(46, 204, 113, 0.4); 
+}
+
+/* === 4. KOMUNIKATY I ICH STANY === */
+.messages { 
+    padding: 15px; margin-bottom: 20px; border-radius: 8px; text-align: center; font-weight: bold; 
+}
+.messages.error { background-color: #ffcccc; color: #c0392b; border: 1px solid #c0392b; }
+.messages.success { background-color: #d5f5e3; color: #27ae60; border: 1px solid #27ae60; }
+/* Kluczowa klasa 'hidden' nadpisuje widoczność (!important). Używamy jej z JS do włączania/wyłączania elementów. */
+.hidden { display: none !important; }
+
+/* === 5. UKŁAD STRONY (CSS GRID) === 
+   'display: grid' dzieli pojemnik na siatkę.
+   'grid-template-columns: 2fr 1fr' oznacza 2 kolumny: lewa jest dwa razy szersza (2 fraction) od prawej (1 fraction). */
+.app-grid { 
+    display: grid; 
+    grid-template-columns: 2fr 1fr; 
+    gap: 30px; 
+}
+
+/* === 6. EKRAN KINOWY Z EFEKTEM 3D === */
+.cinema-section {
+    background-color: var(--panel-bg); padding: 40px 30px; border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.screen {
+    background-color: var(--screen-color); height: 60px; width: 80%; margin-bottom: 50px; 
+    /* EFEKT 3D: perspective ustawia dystans "oka" od ekranu. rotateX odchyla ekran do tyłu po osi X. */
+    transform: perspective(300px) rotateX(-10deg);
+    box-shadow: 0 20px 40px rgba(52, 152, 219, 0.3); /* Cień imitujący światło projektora na podłodze */
+    display: flex; justify-content: center; align-items: center;
+    color: #fff; font-weight: bold; font-size: 1.2rem; border-radius: 4px; letter-spacing: 5px;
+}
+
+/* === 7. KREACJA FOTELI KINOWYCH === */
+/* Siatka układająca fotele po 6 sztuk w rzędzie */
+.seats-container { 
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px 25px; margin-bottom: 40px; 
+}
+
+/* Główny fotel - oparcie */
+.seat {
+    /* position: relative to baza dla podłokietników - pozwala je przypiąć do krawędzi fotela */
+    position: relative; width: 45px; height: 35px;
+    background-color: var(--seat-free);
+    /* border-radius ustawia po kolei zaokrąglenia: góra-lewo, góra-prawo, dół-prawo, dół-lewo. Tworzy oparcie. */
+    border-radius: 12px 12px 4px 4px;
+    /* Dolna ramka symuluje wirtualne podwyższenie (grubość siedziska fotela). */
+    border-bottom: 6px solid rgba(0,0,0,0.3); 
+    cursor: pointer; display: flex; justify-content: center; align-items: center;
+    font-size: 0.8rem; font-weight: bold; color: #fff;
+    /* transition: określa, że po najechaniu myszką, fotel płynnie zmieni kolor i pozycję przez 0.2 sekundy */
+    transition: transform 0.2s, background-color 0.3s; 
+    user-select: none; /* Blokuje "niebieskie zaznaczanie" numeryków przy szybkim klikaniu */
+}
+
+/* Podłokietniki za pomocą pseudo-elementów ::before (lewy) i ::after (prawy).
+   Dzięki nim nie musimy tworzyć dodatkowych elementów div w kodzie HTML. */
+.seat::before, .seat::after {
+    content: ''; /* Wymagane, by pseudo-element się wygenerował */
+    position: absolute; top: 5px; width: 8px; height: 28px; /* Wąski pasek */
+    background-color: var(--seat-armrest); border-radius: 4px;
+}
+.seat::before { left: -8px; } /* Przesunięcie poza lewą krawędź fotela */
+.seat::after { right: -8px; } /* Przesunięcie poza prawą krawędź fotela */
+
+/* Klasy stanów, które aplikacja JavaScript przypina dynamicznie w trakcie działania programu */
+.seat:hover { transform: scale(1.15) translateY(-5px); } /* Fotel rośnie i podskakuje do góry po najechaniu myszą */
+.seat.selected { background-color: var(--seat-selected); color: #000; border-bottom-color: #27ae60;}
+.seat.reserved { background-color: var(--seat-reserved); cursor: not-allowed; border-bottom-color: #c0392b;}
+.seat.reserved:hover { transform: none; } /* Zablokowany fotel traci animację najechania myszką */
+
+/* Klasa dla fotela, w który kliknęliśmy i chcemy usunąć jego rezerwację */
+.seat.targeted-for-cancel { 
+    border: 3px solid #f1c40f; box-shadow: 0 0 15px #f1c40f; transform: scale(1.1); 
+    z-index: 10; /* Zapewnia, że złota obwódka będzie "nad" innymi, obok stojącymi fotelami */
+}
+
+/* === 8. LEGENDA KOLORÓW === */
+.legend { display: flex; gap: 25px; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 10px; font-size: 0.95rem;}
+.seat-sample { width: 25px; height: 20px; border-radius: 6px 6px 2px 2px; }
+.seat-sample.free { background-color: var(--seat-free); }
+.seat-sample.selected { background-color: var(--seat-selected); }
+.seat-sample.reserved { background-color: var(--seat-reserved); }
+
+/* === 9. PANEL STEROWANIA I FORMULARZE (PRAWA STRONA) === */
+.control-panel { display: flex; flex-direction: column; gap: 20px; }
+
+/* Wspólny styl kafelków (boxów) bocznych */
+.stats-box, .reservation-form, .cancel-panel, .extra-options {
+    background-color: var(--panel-bg); padding: 25px; border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+h3 { margin-bottom: 15px; color: var(--screen-color); border-bottom: 1px solid #444; padding-bottom: 8px; }
+.price { font-size: 1.3rem; font-weight: bold; color: var(--seat-selected); margin-top: 15px; }
+
+/* Dynamiczny kontener na generowane bilety (te, które JS dorzuca sam) */
+.dynamic-tickets-container { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; min-height: 50px;}
+.ticket-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.9rem;}
+.ticket-row select { width: 65%; padding: 6px; font-size: 0.9rem; }
+.placeholder-text { color: #888; font-size: 0.9rem; font-style: italic; text-align: center; margin-top: 5px;}
+
+/* Wygląd standardowych pól input */
+.form-group { margin-bottom: 20px; }
+label { display: block; margin-bottom: 8px; font-size: 0.95rem; font-weight: bold;}
+input, select {
+    width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #555;
+    background-color: #333344; color: white; outline: none; transition: border 0.3s;
+}
+/* Po kliknięciu w środek inputa, jego ramka zapala się na zielono */
+input:focus, select:focus { border: 1px solid var(--seat-selected); }
+
+/* === 10. WYGLĄD PRZYCISKÓW === */
+/* Wspólna, bazowa klasa dla każdego przycisku */
+.btn { 
+    width: 100%; padding: 14px; border: none; border-radius: 6px; 
+    font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.3s; 
+}
+/* Efekt :hover to przesunięcie w górę (Y) i rozjaśnienie (brightness) */
+.btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+/* Odmiany kolorystyczne przycisków */
+.btn-primary { background-color: var(--seat-selected); color: #111; }
+.btn-danger { background-color: var(--seat-reserved); color: white; margin-top: 10px;}
+.btn-outline { background-color: transparent; border: 2px solid #7f8c8d; color: #bdc3c7; }
+.btn-outline:hover { background-color: #7f8c8d; color: #fff; }
+
+/* === 11. MEDIA QUERIES (RESPONSYWNOŚĆ) === 
+   Gdy szerokość ekranu spada poniżej 768px (np. telefony, pionowe tablety), 
+   kod poniżej nadpisuje wcześniejsze ustawienia układu. */
+@media (max-width: 768px) {
+    /* Zamienia 2 kolumny (2fr 1fr) na pojedynczą kolumnę (1fr). Panel ląduje pod salą kinową. */
+    .app-grid { grid-template-columns: 1fr; }
+    /* Zagęszcza siatkę foteli z 6 na 5 sztuk w rzędzie, by nie wylewały się poza krawędź smartfona. */
+    .seats-container { grid-template-columns: repeat(5, 1fr); gap: 15px 20px; }
+}
+
+
+
+
+
+
+//js
+
+
+
+
+
+
+
+// ============================================================================
+// 1. ZMIENNE KONFIGURACYJNE I CENNIK (Nie ulegają zmianie w trakcie działania)
+// ============================================================================
+const TOTAL_SEATS = 36; // Ilość foteli do wygenerowania na starcie
+const MAX_SEATS_PER_RESERVATION = 5; // Limit biletów dla jednego klienta
+
+// Słownik z rodzajami biletów. Służy do pobierania nazw i przeliczania całkowitej ceny w koszyku.
+const TICKET_PRICES = {
+    normal: { name: 'Normalny', price: 30 },
+    reduced: { name: 'Ulgowy', price: 20 },
+    student: { name: 'Studencki', price: 15 }
+};
+
+// ============================================================================
+// 2. BAZA DANYCH APLIKACJI (Stan, który ulega ciągłym modyfikacjom)
+// ============================================================================
+// Tablica seatsData będzie przechowywać 36 pojedynczych obiektów. 
+// Każdy obiekt będzie pamiętał ID fotela, jego stan ('free', 'selected', 'reserved') oraz właściciela.
+let seatsData = []; 
+// Zmienna przechowująca ID miejsca (np. 12), w które właśnie kliknęliśmy, by anulować rezerwację
+let seatTargetedForCancel = null; 
+
+// ============================================================================
+// 3. POBRANIE ELEMENTÓW Z DOKUMENTU HTML
+// Używamy getElementById, aby pobrać przyciski, formularze i puste sekcje z HTML.
+// Zapisujemy je pod stałymi, żeby za każdym razem nie zmuszać przeglądarki do szukania.
+// ============================================================================
+const seatsContainer = document.getElementById('seats-container');
+const statFree = document.getElementById('stat-free');
+const statSelected = document.getElementById('stat-selected');
+const statReserved = document.getElementById('stat-reserved');
+const statPrice = document.getElementById('stat-price');
+
+const form = document.getElementById('reservation-form');
+const nameInput = document.getElementById('name');
+const dynamicTicketsContainer = document.getElementById('dynamic-ticket-types');
+const messagesDiv = document.getElementById('messages');
+
+const cancelPanel = document.getElementById('cancel-panel');
+const cancelSeatNumberText = document.getElementById('cancel-seat-number');
+const cancelSeatOwnerText = document.getElementById('cancel-seat-owner');
+const cancelTicketTypeText = document.getElementById('cancel-ticket-type');
+const cancelBtn = document.getElementById('cancel-btn');
+const resetBtn = document.getElementById('reset-cinema-btn');
+
+// ============================================================================
+// 4. INICJALIZACJA APLIKACJI (Uruchamia się raz, po załadowaniu skryptu)
+// ============================================================================
+function initApp() {
+    // Krok 1: Próba odczytania zapisanych rezerwacji z pamięci lokalnej (LocalStorage) przeglądarki.
+    const savedData = localStorage.getItem('cinemaSeatsData');
+    
+    if (savedData) {
+        // Jeśli jest zapis (tekstowy), tłumaczymy go za pomocą JSON.parse z powrotem na obiekty.
+        seatsData = JSON.parse(savedData);
+    } else {
+        // Jeśli nie ma zapisu (pierwsza wizyta), odpalamy pętlę generującą całkowicie pustą bazę danych 36 miejsc.
+        for (let i = 1; i <= TOTAL_SEATS; i++) {
+            // Metoda .push() dodaje nowy element (tutaj: obiekt w klamrach {}) na koniec tablicy.
+            seatsData.push({ id: i, state: 'free', owner: null, ticketType: null });
+        }
+    }
+
+    // Krok 2: Uruchamiamy kluczowe procesy wizualne.
+    createSeatsDOM(); // Tworzy kwadraciki w HTML
+    updateSeatsVisuals(); // Koloruje je na podstawie tablicy
+    renderTicketOptions(); // Przygotowuje formularz biletów (domyślnie pusty)
+    updateStats(); // Odświeża zera w statystykach na prawdziwe wartości
+}
+
+// Funkcja pomocnicza: Tłumaczy tablicę z obiektami (JSON.stringify) na tekst i zapisuje do pamięci przeglądarki
+function saveData() {
+    localStorage.setItem('cinemaSeatsData', JSON.stringify(seatsData));
+}
+
+// ============================================================================
+// 5. GENEROWANIE KODU HTML FOTELI (Manipulacja drzewem DOM)
+// ============================================================================
+function createSeatsDOM() {
+    seatsContainer.innerHTML = ''; // Upewniamy się, że pojemnik startuje jako pusty
+    
+    // Metoda forEach() wykonuje kod dla KAŻDEGO z 36 foteli w naszej tablicy obiektów
+    seatsData.forEach(seat => {
+        // Zamiast pisać divy ręcznie w HTML, tutaj kreujemy element <div> w pamięci RAM komputera.
+        const seatElement = document.createElement('div');
+        seatElement.classList.add('seat'); // Dodajemy mu bazową klasę, by wyglądał jak fotel ze style.css
+        seatElement.id = `seat-element-${seat.id}`; // Unikalne ID do łatwego znalezienia w przyszłości (np. seat-element-12)
+        seatElement.innerText = seat.id; // Wypisanie wielkiej cyfry na samym fotelu
+        
+        // PODPIĘCIE ZDARZENIA (Event Listener): Fotel nasłuchuje 'click' i po naciśnięciu wywołuje handleSeatClick przekazując swoje ID
+        seatElement.addEventListener('click', () => handleSeatClick(seat.id));
+        
+        // Z pamięci RAM przyklejamy gotowy fotel fizycznie na naszą stronę do pojemnika.
+        seatsContainer.appendChild(seatElement);
+    });
+}
+
+// ============================================================================
+// 6. AKTUALIZACJA WIZUALNA FOTELI (Zmiana kolorów/klas CSS)
+// ============================================================================
+function updateSeatsVisuals() {
+    seatsData.forEach(seat => {
+        // Znajdujemy fotel na stronie na podstawie unikalnego ID
+        const seatElement = document.getElementById(`seat-element-${seat.id}`);
+        // Resetujemy mu wszystkie kolory, wracając do standardowego, wolnego szarego fotela (.seat)
+        seatElement.className = 'seat'; 
+
+        // Nadajemy dodatkowe klasy "kolorujące" zgodnie z tym, co jest zapisane w tablicy
+        if (seat.state === 'selected') {
+            seatElement.classList.add('selected'); // Dodanie zielonego
+        } else if (seat.state === 'reserved') {
+            seatElement.classList.add('reserved'); // Dodanie czerwonego
+            
+            // Jeśli obiekt tablicy jest też wybrany do wykasowania rezerwacji, nadajemy złotą, pulsującą ramkę
+            if (seatTargetedForCancel === seat.id) {
+                seatElement.classList.add('targeted-for-cancel');
+            }
+        }
+    });
+}
+
+// ============================================================================
+// 7. GŁÓWNA LOGIKA PROGRAMU PO KLIKNIĘCIU W FOTEL
+// ============================================================================
+function handleSeatClick(seatId) {
+    hideMessage(); // Ukrywamy stare komunikaty przed podjęciem nowej akcji
+    
+    // Używamy .find(), by znaleźć jeden konkretny obiekt w tablicy, którego pole ID równa się numerowi klikniętemu myszką
+    const seat = seatsData.find(s => s.id === seatId);
+
+    // INSTRUKCJA WARUNKOWA: Co robimy zależnie od tego, jaki kolor miał kliknięty fotel?
+    if (seat.state === 'free') {
+        
+        // LIMIT: Metoda .filter() wybiera tylko te obiekty, które mają status selected, a .length mówi nam ile ich jest.
+        const currentlySelected = seatsData.filter(s => s.state === 'selected').length;
+        if (currentlySelected >= MAX_SEATS_PER_RESERVATION) {
+            showMessage(`Możesz kupić maksymalnie ${MAX_SEATS_PER_RESERVATION} biletów naraz!`, 'error');
+            return; // Komenda 'return' brutalnie przerywa dalsze wykonywanie funkcji handleSeatClick!
+        }
+        
+        // Jeśli limit nie został osiągnięty, zmieniamy stan w obiekcie
+        seat.state = 'selected';
+        seat.ticketType = 'normal'; // Ustalamy normalny bilet jako domyślny wybór
+        clearCancelSelection(); // Chowa boczny panel anulowania, jeśli użytkownik klikał gdzieś indziej
+
+    } else if (seat.state === 'selected') {
+        // Jeśli kliknięto w zielony (już wybrany w tej chwili) fotel, traktujemy to jako pomyłkę użytkownika (odznaczamy na szaro)
+        seat.state = 'free';
+        seat.ticketType = null;
+
+    } else if (seat.state === 'reserved') {
+        // Jeśli fotel jest czerwony (zajęty), to znaczy, że użytkownik domaga się dostępu do panelu jego anulowania
+        seatTargetedForCancel = seat.id;
+        showCancelPanel(seat); // Wywołuje funkcję odkrywającą prawy panel boczny ze szczegółami zajętego miejsca
+    }
+
+    // Ważne: Zmieniliśmy stan OBIEKTÓW w pamięci programu, teraz nakazujemy programowi odrysować te zmiany na żywo na ekranie.
+    updateSeatsVisuals();
+    renderTicketOptions();
+    updateStats();
+}
+
+// ============================================================================
+// 8. DYNAMICZNE BILETY I CENA (Renderowanie dodatkowych pół w formularzu)
+// ============================================================================
+function renderTicketOptions() {
+    dynamicTicketsContainer.innerHTML = ''; // Czyścimy pojemnik, w którym pojawiają się rozwijane listy dla każdego z miejsc
+    
+    // Szukamy tylko miejsc oznaczonych jako aktualnie wybrane na zielono
+    const selectedSeats = seatsData.filter(s => s.state === 'selected');
+    
+    // Jeśli zrezygnowaliśmy i odznaczyliśmy wszystko, pokazujemy informacyjny komunikat (tzw. placeholder)
+    if (selectedSeats.length === 0) {
+        dynamicTicketsContainer.innerHTML = '<p class="placeholder-text">Wybierz miejsca na sali, aby przypisać im bilety.</p>';
+        return;
+    }
+
+    // Dla KAŻDEGO zielonego miejsca...
+    selectedSeats.forEach(seat => {
+        // Tworzymy kod nowej linii w HTML-u...
+        const row = document.createElement('div');
+        row.className = 'ticket-row';
+        
+        // ...wstrzykujemy do niej listę <select>. Używamy "backticków" ` ` do łatwego wstawiania zmiennych z JS przez użycie ${zmienna}.
+        row.innerHTML = `
+            <label>Miejsce nr ${seat.id}:</label>
+            <select class="ticket-select" data-seat-id="${seat.id}">
+                <option value="normal" ${seat.ticketType === 'normal' ? 'selected' : ''}>Normalny (30 zł)</option>
+                <option value="reduced" ${seat.ticketType === 'reduced' ? 'selected' : ''}>Ulgowy (20 zł)</option>
+                <option value="student" ${seat.ticketType === 'student' ? 'selected' : ''}>Studencki (15 zł)</option>
+            </select>
+        `;
+        // Wklejamy wiersz w formularz
+        dynamicTicketsContainer.appendChild(row);
+    });
+
+    // ZAKŁADANIE KOLEJNEGO ZDARZENIA (Nasłuchujemy wszystkich list wyboru na raz). 
+    // Event 'change' pozwala natychmiast zareagować (np. na zmianę z normalnego na studencki), zapisać to do obiektu miejsca i wywołać odświeżenie ceny.
+    document.querySelectorAll('.ticket-select').forEach(select => {
+        select.addEventListener('change', (event) => {
+            const seatId = parseInt(event.target.getAttribute('data-seat-id'));
+            const seat = seatsData.find(s => s.id === seatId);
+            seat.ticketType = event.target.value; // Nadpisuje nowy typ biletu do tablicy głównej
+            updateStats(); // Odświeża widok cen z boku
+        });
+    });
+}
+
+// ============================================================================
+// 9. STATYSTYKI ORAZ OBLICZANIE WYNIKÓW
+// ============================================================================
+function updateStats() {
+    // Szybkie statystyki - .filter odsieje np. z tablicy 36 miejsc tylko te, które są 'free', a .length wyliczy sztuki (np. 18).
+    statFree.innerText = seatsData.filter(s => s.state === 'free').length;
+    statSelected.innerText = seatsData.filter(s => s.state === 'selected').length;
+    statReserved.innerText = seatsData.filter(s => s.state === 'reserved').length;
+
+    let totalPrice = 0;
+    
+    // Szukamy wybranych zielonych foteli i dla każdego z nich wykonujemy akcję...
+    seatsData.filter(s => s.state === 'selected').forEach(seat => {
+        // ...dokładamy do totalPrice cenę. Skąd bierze się ta cena? Ze stałego cennika TICKET_PRICES na górze, do którego odwołujemy się jako TICKET_PRICES['normal'].price 
+        totalPrice += TICKET_PRICES[seat.ticketType].price;
+    });
+    
+    statPrice.innerText = totalPrice;
+}
+
+// ============================================================================
+// 10. POTWIERDZENIE ZAMÓWIENIA ORAZ WALIDACJA FORMULARZA
+// ============================================================================
+form.addEventListener('submit', function(event) {
+    // event.preventDefault() jest sercem aplikacji 'Single Page'. Nie dopuszcza on formularza do wbudowanej w przeglądarce 
+    // próby wysłania zapytania poprzez odświeżenie całej strony, co usunęłoby nasze niezapisane dane w skrypcie!
+    event.preventDefault(); 
+
+    const selectedSeats = seatsData.filter(s => s.state === 'selected');
+    // Używamy .trim(), aby wyrzucić zbędne puste spacje np. "   Jan   ", by ułatwić i zabezpieczyć zapis.
+    const ownerName = nameInput.value.trim(); 
+
+    // WALIDACJA I: Użytkownik kliknął rezerwację nic nie zaznaczając na ekranie
+    if (selectedSeats.length === 0) {
+        showMessage('Zaznacz fotel na ekranie, aby dokonać rezerwacji!', 'error');
+        return;
+    }
+
+    // WALIDACJA II: Sprawdzamy, czy podzielone imię tworzy m.in 2 człony (wymusza Imię oraz Nazwisko).
+    if (ownerName.split(' ').length < 2) {
+        showMessage('Proszę podać pełne imię i nazwisko.', 'error');
+        return;
+    }
+
+    // WALIDACJA III (REGULAR EXPRESSION - ZAAWANSOWANE ZABEZPIECZENIE):
+    // Znak po znaku przepuszcza wyrazy sprawdzając jedynie autoryzowane polskie znaki z klawiatury bez symboli, cyfr czy znaków interpunkcyjnych (poza dopuszczonym myślnikiem \-).
+    const nameRegex = /^[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\s\-]+$/;
+    if (!nameRegex.test(ownerName)) {
+        showMessage('Dane mogą zawierać tylko litery. Cyfry i znaki specjalne są niedozwolone!', 'error');
+        return;
+    }
+
+    // Akcja ostateczna: Sukces w zamówieniu, wprowadzamy dane osobowe jako 'owner' do obiektu bazy danych i zaznaczamy, by był traktowany od teraz jako 'reserved' (czerwony)
+    selectedSeats.forEach(seat => {
+        seat.state = 'reserved';
+        seat.owner = ownerName;
+    });
+
+    // Reset i zapisy (aby program powrócił do początkowych wytycznych bez zbednego odświeżania okna klienta).
+    nameInput.value = '';
+    updateSeatsVisuals();
+    renderTicketOptions();
+    updateStats();
+    saveData(); 
+    showMessage(`Sukces! Zarezerwowano ${selectedSeats.length} miejsc(a) dla: ${ownerName}`, 'success');
+});
+
+// ============================================================================
+// 11. ZARZĄDZANIE: FUNKCJA ANULOWANIA ISTNIEJĄCYCH REZERWACJI
+// ============================================================================
+function showCancelPanel(seat) {
+    cancelPanel.classList.remove('hidden'); // Pokazuje panel w kodzie, zrzucając maskę 'ukryto'
+    cancelSeatNumberText.innerText = seat.id;
+    cancelSeatOwnerText.innerText = seat.owner;
+    // Wyciągamy na nowo czytelną dla człowieka nazwę (np. "Studencki") na podstawie surowego znacznika w kodzie 'student'. 
+    cancelTicketTypeText.innerText = TICKET_PRICES[seat.ticketType].name; 
+}
+
+// Chowanie bocznego panelu (zrzucanie maski powraca)
+function clearCancelSelection() {
+    seatTargetedForCancel = null;
+    cancelPanel.classList.add('hidden');
+}
+
+// Jeśli klikniemy ogromny czerwony guzik do anulowania zamówienia.
+cancelBtn.addEventListener('click', () => {
+    if (seatTargetedForCancel !== null) {
+        // Ponownie szukamy obiektu zaznaczonego błękitną obwódką w poszukiwaniu
+        const seat = seatsData.find(s => s.id === seatTargetedForCancel);
+        
+        // Zamazujemy dane - czyli czyścimy naszą bazę ze starych naleciałości i zwracamy status na 'free' (szary).
+        seat.state = 'free';
+        seat.owner = null;
+        seat.ticketType = null;
+
+        showMessage(`Anulowano rezerwację miejsca nr ${seat.id}`, 'success');
+        
+        clearCancelSelection();
+        updateSeatsVisuals();
+        updateStats();
+        saveData(); // Aktualizuje pamięć (LocalStorage)
+    }
+});
+
+// ============================================================================
+// 12. RESET SALI KINOWEJ ORAZ KOSZA (Czyszczenie całej aplikacji)
+// ============================================================================
+resetBtn.addEventListener('click', () => {
+    // confirm() wywołuje wbudowane, natywne i bezpieczne ostrzeżenie pośrodku systemu użytkownika "Czy aby na pewno?!"
+    if(confirm('Czy na pewno chcesz usunąć WSZYSTKIE rezerwacje? Ta akcja wyczyści również pamięć lokalną.')) {
+        localStorage.removeItem('cinemaSeatsData'); // Usuwanie "na twardo"
+        seatsData = []; 
+        clearCancelSelection();
+        initApp(); // Rekursywnie zmusza cały kod do przeładowania procesu od zera i wygenerowania pustych miejsc ponownie.
+        showMessage('Sala została całkowicie zresetowana.', 'success');
+    }
+});
+
+// ============================================================================
+// 13. GLOBALNY SYSTEM POWIADOMIEŃ UŻYTKOWNIKA (Feedback UI)
+// ============================================================================
+function showMessage(text, type) {
+    messagesDiv.innerText = text;
+    // Klasa dynamiczna 'type' przyporządkowuje podciągnięty z HTML plik jako klasę 'error' bądź 'success' wyciągając tym samym prawidłowy CSS do stylów.
+    messagesDiv.className = `messages ${type}`; 
+    
+    // Wbudowany Timer systemowy (JS), zamyka automatycznie powiadomienie po upływie dokładnie 4000ms. Oznacza to bezpieczny i czytelny sposób odzyskiwania informacji z alertów. 
+    setTimeout(hideMessage, 4000);
+}
+
+function hideMessage() {
+    messagesDiv.classList.add('hidden');
+}
+
+// Startowanie głównej osi aplikacji po odczytaniu całego w/w skryptu
+initApp();
