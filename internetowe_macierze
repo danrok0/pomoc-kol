@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Macierzowy - Obliczenia Krok po Kroku</title>
+    
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* Sekcja stylów (CSS) - odpowiada za to, żeby strona ładnie wyglądała */
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: #f9fbfd;
+            color: var(--primary-color);
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        select, input {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        /* Magia ułożenia pól tekstowych w macierz: 
+           Używamy CSS Grid, mówiąc: "Zrób 2 (lub 3) kolumny, każda po 60 pikseli" */
+        .matrix-input { display: grid; gap: 10px; justify-content: center; margin: 20px 0; }
+        .grid-3x3 { grid-template-columns: repeat(3, 60px); }
+        .grid-2x2 { grid-template-columns: repeat(2, 60px); }
+        .matrix-input input { width: 60px; height: 40px; text-align: center; }
+        
+        .matrix-brackets { display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .bracket { font-size: 80px; font-weight: 100; }
+        
+        #solution {
+            margin-top: 30px; padding: 20px;
+            background-color: #f1f8ff; border-left: 5px solid var(--secondary-color);
+        }
+        .error { color: #e74c3c; font-weight: bold; }
+        .step { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 style="text-align:center;">Dynamiczny Kalkulator Matematyczny</h1>
+    
+    <div style="text-align:center; margin-bottom: 20px;">
+        <label for="taskSelect"><strong>Wybierz typ zadania:</strong></label><br><br>
+        <select id="taskSelect">
+            <option value="det2x2">1a. Obliczanie wyznacznika macierzy 2x2</option>
+            <option value="det3x3">1b. Obliczanie wyznacznika macierzy 3x3</option>
+            <option value="inv2x2">2a. Wyznaczanie macierzy odwrotnej 2x2</option>
+            <option value="inv3x3">2b. Wyznaczanie macierzy odwrotnej 3x3</option>
+        </select>
+    </div>
+
+    <div>
+        <h2 style="text-align:center;">Wprowadź dane macierzy</h2>
+        <div class="matrix-brackets">
+            <div class="bracket">[</div>
+            <div id="matrixGrid" class="matrix-input grid-2x2"></div>
+            <div class="bracket">]</div>
+        </div>
+    </div>
+
+    <div id="solution">
+        <p>Wprowadź wszystkie dane, aby zobaczyć kroki rozwiązania.</p>
+    </div>
+</div>
+
+<script>
+    // --- 1. KONFIGURACJA MATHJAX ---
+    // Mówimy bibliotece MathJax: "Będziemy używać znaczków $$ oraz \( \) do równań".
+    // Mówimy też: "startup: { typeset: false }" - co znaczy: nie renderuj wzorów sam przy 
+    // starcie strony. Poczekaj, aż nasz skrypt napisze rozwiązanie i wyda Ci na to komendę.
+    window.MathJax = {
+        tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+        startup: { typeset: false }
+    };
+
+    // --- 2. ŁAPANIE ELEMENTÓW HTML ---
+    // Łapiemy poszczególne części strony po ich ID i zapisujemy do "stałych" (const), 
+    // żebyśmy mogli na nich operować w kodzie bez szukania ich za każdym razem.
+    const taskSelect = document.getElementById('taskSelect');
+    const matrixGrid = document.getElementById('matrixGrid');
+    const solutionDiv = document.getElementById('solution');
+
+    // --- 3. INICJALIZACJA STRONY ---
+    // window.onload odpala się, gdy strona w 100% się załaduje. Uruchamia funkcję init().
+    window.onload = init;
+
+    function init() {
+        // Dodajemy 'nasłuchiwacz' (EventListener). Jeśli ktoś zmieni opcję w menu (event 'change'),
+        // odpal funkcję buildInputGrid (czyli przebuduj ilość kratek).
+        taskSelect.addEventListener('change', buildInputGrid);
+        
+        // Wywołujemy to też raz ręcznie na samym początku, żeby narysować kratki 2x2 zaraz po wejściu na stronę.
+        buildInputGrid();
+    }
+
+    // --- 4. TWORZENIE KRATEK DO WPISYWANIA ---
+    function buildInputGrid() {
+        const task = taskSelect.value; // Odczytuje, co jest wybrane (np. "det3x3")
+        matrixGrid.innerHTML = '';     // Czyści wszystkie aktualne kratki
+        
+        // Sprawdzamy czy wybrana opcja zawiera tekst '3x3'. Zwraca true albo false.
+        const is3x3 = task.includes('3x3'); 
+        
+        // Zapis skrócony (operator trójargumentowy): "Czy is3x3 to prawda? Jeśli tak, weź 3. Jeśli nie, weź 2."
+        const rows = is3x3 ? 3 : 2;
+        const cols = is3x3 ? 3 : 2;
+        
+        // Podmieniamy klasę CSS w HTML-u, żeby przeglądarka ułożyła to w 3 albo 2 kolumnach.
+        matrixGrid.className = is3x3 ? 'matrix-input grid-3x3' : 'matrix-input grid-2x2';
+
+        // Podwójna pętla - idzie po rzędach i po kolumnach (czyli wykonuje się 4 lub 9 razy)
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < cols; j++) {
+                const input = document.createElement('input'); // Tworzy nowy element <input> w pamięci
+                input.type = 'number';                         // Pozwala wpisywać tylko liczby
+                input.id = `m${i}${j}`;                        // Nadaje unikalne ID, np. m00, m01...
+                input.placeholder = `a${i+1}${j+1}`;           // To ten wyszarzony tekst pomocniczy
+                
+                // NAJWAŻNIEJSZE: przyczepiamy do KAŻDEJ kratki nasłuchiwacz.
+                // Kiedy tylko użytkownik wpisze jakąś literkę (event 'input'), 
+                // od razu uruchom funkcję liczącą: solveTask().
+                input.addEventListener('input', solveTask);
+                
+                // Na koniec doklejamy stworzony input fizycznie do strony
+                matrixGrid.appendChild(input);
+            }
+        }
+        
+        // Po przebudowaniu kratek resetujemy pole wyniku
+        solutionDiv.innerHTML = '<p>Wprowadź wszystkie dane, aby zobaczyć kroki rozwiązania.</p>';
+    }
+
+    // --- 5. POBIERANIE DANYCH Z KRATEK ---
+    // Funkcja zagląda do wszystkich kratek na ekranie i składa z nich prawdziwą, matematyczną macierz.
+    function getMatrixValues(rows, cols) {
+        const matrix = [];           // Tu zbudujemy naszą tablicę z tablicami (macierz)
+        let allFilled = true;        // Flaga, która mówi, czy wszystkie kratki są uzupełnione
+        
+        for (let i = 0; i < rows; i++) {
+            const row = [];
+            for (let j = 0; j < cols; j++) {
+                // Pobieramy wartość z konkretnej kratki (np. z ID 'm00')
+                const val = document.getElementById(`m${i}${j}`).value;
+                if (val === '') allFilled = false; // Jeśli puste - zaznaczamy flagę
+                
+                // parseFloat zamienia wpisany w przeglądarkę tekst na prawdziwą liczbę zmiennoprzecinkową
+                row.push(parseFloat(val)); 
+            }
+            matrix.push(row); // Dodajemy gotowy wiersz do macierzy
+        }
+        // Funkcja zwraca dwa obiekty: ułożoną macierz oraz informację, czy jest kompletna
+        return { matrix, allFilled };
+    }
+
+    // --- 6. RENDEROWANIE WZORÓW MATHJAX ---
+    // Kiedy mamy już wygenerowany tekst z rozwiązaniem (zmienna content), wrzucamy go na stronę.
+    function renderMath(content) {
+        solutionDiv.innerHTML = content; // Wrzucenie gotowego tekstu HTML do kontenera z wynikiem
+        
+        // Komenda do biblioteki MathJax: "Przeszukaj div solutionDiv, znajdź tam dolary $$ 
+        // i zamień je na profesjonalne wzory matematyczne LaTeX".
+        MathJax.typesetPromise([solutionDiv]).catch((err) => console.log(err.message));
+    }
+
+    // --- 7. DELEGOWANIE ZADAŃ ---
+    // To jest główny menedżer. Sprawdza co jest zaznaczone w liście rozwijanej i odpala odpowiednią matematykę.
+    function solveTask() {
+        const task = taskSelect.value;
+        if (task === 'det2x2') solveDet2x2();
+        else if (task === 'det3x3') solveDet3x3();
+        else if (task === 'inv2x2') solveInv2x2();
+        else if (task === 'inv3x3') solveInv3x3();
+    }
+
+    // --- 8. LOGIKA MATEMATYCZNA (PRZYKŁAD WYZNACZNIK 2x2) ---
+    function solveDet2x2() {
+        // Pobieramy macierz i informację czy jest cała uzupełniona z funkcji pomocniczej
+        const { matrix, allFilled } = getMatrixValues(2, 2);
+        
+        // Zabezpieczenia: Jeśli nie uzupełniono do końca, lub wpisano głupoty (np literę 'e') - przerwij.
+        if (!allFilled) return showPending();
+        if (hasErrors(matrix)) return showError();
+
+        // DESTRUKTURYZACJA: bardzo mądry zapis JS. 
+        // Ponieważ wiemy, że matrix to tablica np: [[1, 2], [3, 4]], 
+        // ten zapis od razu mówi: a=1, b=2, c=3, d=4. Szybko i czytelnie!
+        const [[a, b], [c, d]] = matrix;
+        
+        // Zwykła matematyka - wyznacznik ad - bc
+        const det = (a * d) - (b * c);
+
+        // BUDOWANIE ROZWIĄZANIA (Template Literals)
+        // Używając odwróconych apostrofów (backticks ` `) możemy wpisywać zmienne w tekst 
+        // za pomocą znaków ${zmienna}.
+        let output = `<h3>Rozwiązanie - Wyznacznik macierzy 2x2</h3>`;
+        
+        // Używamy zapisu $$ ... $$ - to instrukcje dla systemu LaTeX.
+        output += `<div class="step"><strong>Wprowadzona macierz A:</strong><br>
+            $$ A = \\begin{pmatrix} ${a} & ${b} \\\\ ${c} & ${d} \\end{pmatrix} $$</div>`;
+            
+        output += `<div class="step"><strong>Krok 1:</strong> Obliczamy wyznacznik ze wzoru $\\det(A) = a_{11}a_{22} - a_{12}a_{21}$:<br>
+            $$ \\det(A) = (${a} \\cdot ${d}) - (${b} \\cdot ${c}) = ${a*d} - (${b*c}) = ${det} $$</div>`;
+        
+        // Zlecamy narysowanie tego MathJaxowi
+        renderMath(output);
+    }
+
+    // (Pozostałe funkcje solveDet3x3, solveInv2x2, solveInv3x3 działają na dokładnie tej samej 
+    // zasadzie mechanicznej, zmienia się tylko trudność formuł matematycznych).
+
+    function solveDet3x3() {
+        const { matrix, allFilled } = getMatrixValues(3, 3);
+        if (!allFilled) return showPending();
+        if (hasErrors(matrix)) return showError();
+
+        const [[a11, a12, a13], [a21, a22, a23], [a31, a32, a33]] = matrix;
+        const det = (a11*a22*a33) + (a12*a23*a31) + (a13*a21*a32) - (a31*a22*a13) - (a32*a23*a11) - (a33*a21*a12);
+
+        let output = `<h3>Rozwiązanie - Wyznacznik macierzy 3x3</h3>`;
+        output += `<div class="step">$$ A = \\begin{pmatrix} ${a11} & ${a12} & ${a13} \\\\ ${a21} & ${a22} & ${a23} \\\\ ${a31} & ${a32} & ${a33} \\end{pmatrix} $$</div>`;
+        output += `<div class="step"><strong>Wynik:</strong> $$ \\det(A) = ${det} $$</div>`;
+
+        renderMath(output);
+    }
+
+    function solveInv2x2() {
+        const { matrix, allFilled } = getMatrixValues(2, 2);
+        if (!allFilled) return showPending();
+        if (hasErrors(matrix)) return showError();
+
+        const [[a, b], [c, d]] = matrix;
+        const det = (a * d) - (b * c);
+
+        let output = `<h3>Rozwiązanie - Macierz odwrotna 2x2</h3>`;
+        output += `<div class="step">$$ A = \\begin{pmatrix} ${a} & ${b} \\\\ ${c} & ${d} \\end{pmatrix} $$</div>`;
+        output += `<div class="step"><strong>Krok 1:</strong> Wyznacznik macierzy $\\det(A) = ${det}$</div>`;
+
+        if (det === 0) {
+            output += `<div class="step error">Wyznacznik wynosi 0. Macierz jest osobliwa, macierz odwrotna nie istnieje.</div>`;
+            return renderMath(output);
+        }
+
+        // Metoda .toFixed(3) obcina liczbę do 3 miejsc po przecinku (np. 0.333).
+        // .replace(/\.000$/, '') to użycie tzw. Wyrażenia Regularnego. Usuwa końcówkę .000, 
+        // jeśli wynik wyszedł okrągły (żeby brzydko nie wyglądało np. 5.000).
+        const invA = (d / det).toFixed(3).replace(/\.000$/, '');
+        const invB = (-b / det).toFixed(3).replace(/\.000$/, '');
+        const invC = (-c / det).toFixed(3).replace(/\.000$/, '');
+        const invD = (a / det).toFixed(3).replace(/\.000$/, '');
+
+        output += `<div class="step"><strong>Wynik:</strong><br>
+            $$ A^{-1} = \\frac{1}{${det}} \\begin{pmatrix} ${d} & ${-b} \\\\ ${-c} & ${a} \\end{pmatrix} = \\begin{pmatrix} ${invA} & ${invB} \\\\ ${invC} & ${invD} \\end{pmatrix} $$</div>`;
+
+        renderMath(output);
+    }
+
+    function solveInv3x3() {
+        const { matrix, allFilled } = getMatrixValues(3, 3);
+        if (!allFilled) return showPending();
+        if (hasErrors(matrix)) return showError();
+
+        const [[a11, a12, a13], [a21, a22, a23], [a31, a32, a33]] = matrix;
+        const det = (a11*a22*a33) + (a12*a23*a31) + (a13*a21*a32) - (a31*a22*a13) - (a32*a23*a11) - (a33*a21*a12);
+
+        let output = `<h3>Rozwiązanie - Macierz odwrotna 3x3</h3>`;
+        output += `<div class="step"><strong>Krok 1:</strong> Obliczenie wyznacznika: $\\det(A) = ${det}$</div>`;
+
+        if (det === 0) {
+            output += `<div class="step error">Wyznacznik wynosi 0. Macierz odwrotna nie istnieje.</div>`;
+            return renderMath(output);
+        }
+
+        // --- Złożona logika dla macierzy odwrotnej 3x3 (Dopełnienia algebraiczne) ---
+        // Ta mała funkcja "wycina" z macierzy wskazany wiersz i kolumnę, i liczy wyznacznik z tego co zostało (tzw. Minor 2x2).
+        const getMinor = (m, row, col) => {
+            const sub = m.filter((_, i) => i !== row).map(r => r.filter((_, j) => j !== col));
+            return (sub[0][0] * sub[1][1]) - (sub[0][1] * sub[1][0]);
+        };
+
+        const C = [[0,0,0], [0,0,0], [0,0,0]];
+        for(let i=0; i<3; i++) {
+            for(let j=0; j<3; j++) {
+                // Obliczamy dopełnienie mnożąc Minor przez -1 lub 1 w zależności od parzystości wiersza i kolumny.
+                C[i][j] = getMinor(matrix, i, j) * Math.pow(-1, i + j);
+            }
+        }
+
+        // Transpozycja (odwracamy wiersze z kolumnami macierzy dopełnień)
+        const Adj = [
+            [C[0][0], C[1][0], C[2][0]],
+            [C[0][1], C[1][1], C[2][1]],
+            [C[0][2], C[1][2], C[2][2]]
+        ];
+
+        // Formatujemy wynik końcowy mnożąc każdy element przez 1/wyznacznik
+        const formatResult = (val) => (val / det).toFixed(3).replace(/\.000$/, '');
+        const res = Adj.map(row => row.map(formatResult));
+
+        output += `<div class="step"><strong>Krok 4:</strong> Wynik (po przemnożeniu przez odwrotność wyznacznika):<br>
+            $$ A^{-1} = \\begin{pmatrix} ${res[0][0]} & ${res[0][1]} & ${res[0][2]} \\\\ ${res[1][0]} & ${res[1][1]} & ${res[1][2]} \\\\ ${res[2][0]} & ${res[2][1]} & ${res[2][2]} \\end{pmatrix} $$</div>`;
+
+        renderMath(output);
+    }
+
+    // --- 9. FUNKCJE POMOCNICZE (BŁĘDY I ZABEZPIECZENIA) ---
+    function showPending() {
+        solutionDiv.innerHTML = '<p>Wprowadź wszystkie dane, aby zobaczyć kroki rozwiązania.</p>';
+    }
+    function showError() {
+        solutionDiv.innerHTML = '<p class="error">Wprowadzono nieprawidłowe dane! Używaj tylko liczb.</p>';
+    }
+    
+    // Ta funkcja jest bardzo sprytna. 
+    // .flat() "rozgniata" naszą tablicę z tablicami do jednego płaskiego ciągu.
+    // .some(isNaN) sprawdza: czy JAKIKOLWIEK (some) z elementów nie jest liczbą (isNaN = is Not-a-Number).
+    // Jeśli tak, zwraca true - mamy błąd, ktoś np. wpisał znak zapytania.
+    function hasErrors(matrix) {
+        return matrix.flat().some(isNaN);
+    }
+
+</script>
+
+</body>
+</html>
