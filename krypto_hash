@@ -1,0 +1,197 @@
+import sys
+import hashlib
+
+def main():
+    # -------------------------------------------------------------------
+    # ETAP 1: KULOODPORNE POBIERANIE DANYCH
+    # -------------------------------------------------------------------
+    # sys.stdin.read().split() bierze CAŁY tekst, który podał użytkownik
+    # i tnie go na pojedyncze słowa, całkowicie ignorując entery, tabulatory 
+    # i podwójne spacje. Dzięki temu "brudne" dane ze sprawdzarki nie zepsują nam kodu.
+    tokens = sys.stdin.read().split()
+    
+    # Jeśli nie ma chociaż 2 słów (nazwa algorytmu i liczba q), kończymy.
+    if len(tokens) < 2:
+        return
+
+    # Używamy .upper(), żeby system traktował 'sha-256' i 'SHA-256' tak samo.
+    algo_name = tokens[0].upper()
+    q = int(tokens[1])
+
+    # -------------------------------------------------------------------
+    # ETAP 2: KONFIGURACJA KRYPTOGRAFII
+    # -------------------------------------------------------------------
+    # Słownik, który podpowiada Pythonowi: "Gdy użytkownik wpisze SHA-256, 
+    # użyj biblioteki 'sha256' i pamiętaj, że wypluwa ona 256 bitów".
+    algo_map = {
+        'MD5': ('md5', 128),
+        'SHA-1': ('sha1', 160),
+        'SHA-256': ('sha256', 256),
+        'SHA3-256': ('sha3_256', 256),
+        'BLAKE2S': ('blake2s', 256)
+    }
+    
+    # Jeśli algorytm z wejścia to np. literówka, domyślnie użyjemy SHA-256.
+    hash_func_name, total_bits = algo_map.get(algo_name, ('sha256', 256))
+
+    # To nasz fabryczny pracownik. Dajesz mu tekst, a on zwraca skrót hex.
+    def get_hash(text):
+        h = hashlib.new(hash_func_name)
+        h.update(text.encode('utf-8')) # Przed haszowaniem tekst musi stać się surowymi bajtami
+        return h.hexdigest()
+
+    # Konstruktor naszej piramidy - Drzewa Merkle'a
+    def compute_merkle_root(leaves):
+        if not leaves: # Brak dokumentów = brak korzenia
+            return ""
+            
+        current_level = leaves[:] # Kopiujemy listę, żeby nie zepsuć oryginału
+        
+        # Pniemy się w górę, dopóki nie zostanie nam tylko 1 węzeł
+        while len(current_level) > 1:
+            next_level = []
+            
+            # Przeskakujemy co 2 elementy (żeby dobierać w pary)
+            for i in range(0, len(current_level), 2):
+                left = current_level[i]
+                
+                # Jeśli lewy ma prawego sąsiada, weź go. 
+                # Jeśli jest samotny na końcu (nieparzysta liczba), powiel lewego.
+                if i + 1 < len(current_level):
+                    right = current_level[i + 1]
+                else:
+                    right = left
+                    
+                # Złącz dwa ciągi znaków i zrób z nich nowy skrót. Dodaj go poziom wyżej.
+                next_level.append(get_hash(left + right))
+                
+            current_level = next_level # Nadpisz stary poziom nowym
+            
+        return current_level[0] # Zwróć ostateczny, jedyny element
+
+    # -------------------------------------------------------------------
+    # ETAP 3: BAZA DANYCH (STAN SYSTEMU)
+    # -------------------------------------------------------------------
+    registered_user = False
+    stored_salt = ""
+    stored_hash = ""
+    is_logged_in = False
+
+    doc_order = []  # Tu trzymamy tylko NAZWY dokumentów, żeby zachować kolejność
+    doc_leaves = {} # Tu trzymamy NAZWĘ i przypisany do niej aktualny HASH
+
+    # -------------------------------------------------------------------
+    # ETAP 4: INTELIGENTNY PODAJNIK SŁÓW
+    # -------------------------------------------------------------------
+    idx = 2 # Zaczynamy czytać od 3. słowa (bo 1. to algo, a 2. to q)
+    
+    # Ta funkcja działa jak taśmociąg. Jak jej użyjemy, daje nam kolejne słowo
+    # z wejścia i przesuwa się dalej. Zapobiega to crashom, jeśli brakuje parametru.
+    def next_token():
+        nonlocal idx
+        if idx < len(tokens):
+            val = tokens[idx]
+            idx += 1
+            return val
+        return ""
+
+    # -------------------------------------------------------------------
+    # ETAP 5: LOGIKA KOMEND (PĘTLA GŁÓWNA)
+    # -------------------------------------------------------------------
+    for _ in range(q):
+        if idx >= len(tokens):
+            break # Zabezpieczenie: jeśli skończyły się słowa przed końcem 'q'
+            
+        cmd = next_token() # Pobierz pierwszą komendę
+
+        if cmd == 'REGISTER':
+            salt = next_token()
+            password = next_token()
+            
+            if registered_user:
+                print("EXISTS")
+            else:
+                stored_salt = salt
+                # Zapisujemy skrót z połączenia: "nasza_sol:haslo_uzytkownika"
+                stored_hash = get_hash(f"{salt}:{password}")
+                registered_user = True
+                print("OK")
+                
+        elif cmd == 'LOGIN':
+            password = next_token()
+            
+            if not registered_user:
+                print("NOAUTH")
+            else:
+                # Weryfikacja: z podanego hasła i naszej soli liczymy skrót.
+                # Jeśli jest taki sam jak ten w bazie = hasło jest poprawne!
+                if get_hash(f"{stored_salt}:{password}") == stored_hash:
+                    is_logged_in = True
+                    print("OK")
+                else:
+                    is_logged_in = False
+                    print("FAIL")
+                    
+        elif cmd == 'ADD':
+            docname = next_token()
+            content = next_token()
+            
+            if not is_logged_in:
+                print("NOAUTH")
+            else:
+                h_val = get_hash(content)
+                # Jeśli to nowy dokument, dodajemy go na koniec listy
+                if docname not in doc_order:
+                    doc_order.append(docname)
+                # Aktualizujemy skrót dokumentu (pozycja w liście doc_order pozostaje ta sama!)
+                doc_leaves[docname] = h_val
+                print(h_val)
+                
+        elif cmd == 'ROOT':
+            if not is_logged_in:
+                print("NOAUTH")
+            else:
+                if not doc_order:
+                    print("EMPTY")
+                else:
+                    # Wyciągamy skróty dokumentów w poprawnej kolejności historycznej
+                    leaves = [doc_leaves[name] for name in doc_order]
+                    # Budujemy drzewo Merkle'a i wypisujemy jego Korzeń
+                    print(compute_merkle_root(leaves))
+                    
+        elif cmd == 'VERIFY':
+            docname = next_token()
+            content = next_token()
+            
+            if not is_logged_in:
+                print("NOAUTH")
+            else:
+                # Sprawdzamy czy dokument w ogóle istnieje ORAZ czy skrót podanego tekstu
+                # idealnie pasuje do skrótu, który mamy zarchiwizowany w bazie.
+                if docname in doc_leaves and get_hash(content) == doc_leaves[docname]:
+                    print("OK")
+                else:
+                    print("TAMPERED") # TAMPERED = Ktoś majstrował przy pliku!
+                    
+        elif cmd == 'AVALANCHE':
+            text1 = next_token()
+            text2 = next_token()
+            
+            h1 = get_hash(text1)
+            h2 = get_hash(text2)
+            
+            # int(skrot, 16) zamienia znaki szesnastkowe (np. 1f4a) na zwykłe liczby
+            val1 = int(h1, 16)
+            val2 = int(h2, 16)
+            
+            # Operator ^ (XOR) w Pythonie sprawdza reprezentację binarną (zera i jedynki).
+            # Jeśli bit w val1 jest inny niż w val2, XOR wypluje jedynkę.
+            # .count('1') po prostu liczy ile było tych różnic.
+            diff_bits = bin(val1 ^ val2).count('1')
+            
+            # Zwykłe liczenie procentów ze wzoru: (część / całość) * 100
+            pct = (diff_bits / total_bits) * 100
+            print(f"{pct:.2f}%")
+
+if __name__ == '__main__':
+    main()
