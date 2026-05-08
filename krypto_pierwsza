@@ -1,0 +1,107 @@
+def fast_mod_exp(base: int, exp: int, mod: int) -> int:
+    """
+    Szybkie potęgowanie modularne.
+    Zamiast mnożyć bazę 'exp' razy, podnosi ją do kwadratu
+    i mnoży wynik tylko dla jedynek w zapisie binarnym potęgi.
+    Dzięki 'mod' liczby nie rosną w nieskończoność.
+    """
+    result = 1
+    base = base % mod
+    
+    while exp > 0:
+        # Jeśli ostatni bit wykładnika to 1 (liczba nieparzysta)
+        if exp % 2 == 1:
+            result = (result * base) % mod
+            
+        # Przesuwamy wykładnik bitowo w prawo (to samo co exp //= 2)
+        exp >>= 1
+        # Podnosimy bazę do kwadratu na poczet kolejnego bitu
+        base = (base * base) % mod
+        
+    return result
+
+def decompose(n: int) -> tuple[int, int]:
+    """
+    Rozkłada liczbę parzystą (n-1) na iloczyn potęgi dwójki i liczby nieparzystej.
+    Zwraca krotkę (s, d), gdzie n - 1 = 2^s * d.
+    To przygotowanie potęgi do "dzielenia jej na kroki" w MR.
+    """
+    x = n - 1
+    s = 0
+    # Dopóki liczba dzieli się przez 2 bez reszty:
+    while x % 2 == 0:
+        x //= 2   # Dzielimy przez 2
+        s += 1    # Liczymy, ile razy się udało (nasze s)
+        
+    return s, x   # Zwracamy ilość dwójek (s) oraz resztę nieparzystą (d)
+
+def miller_rabin_round(n: int, a: int) -> bool:
+    """
+    Jedna runda testu Millera-Rabina dla konkretnej bazy 'a'.
+    Zwraca True, jeśli test nie znalazł oszustwa (n broni się jako pierwsza).
+    Zwraca False, jeśli udowodniono, że n jest złożona.
+    """
+    # 1. Dekompozycja n-1
+    s, d = decompose(n)
+    
+    # 2. Krok startowy: x = a^d mod n
+    x = fast_mod_exp(a, d, n)
+    
+    # 3. Jeśli od razu trafiliśmy na 1 lub -1 (czyli n-1), test zdany
+    if x == 1 or x == n - 1:
+        return True
+        
+    # 4. Krok potęgowania do kwadratu (szukamy n-1)
+    # Wykonujemy to (s - 1) razy
+    for _ in range(s - 1):
+        # Podnosimy x do kwadratu i wyciągamy resztę z dzielenia
+        x = (x * x) % n
+        
+        # Jeśli natrafiliśmy na -1 (czyli n-1), liczba zachowuje się 
+        # poprawnie jak liczba pierwsza -> runda zaliczona.
+        if x == n - 1:
+            return True
+            
+    # 5. Jeśli pętla dobiegła końca i nigdy nie widzieliśmy n-1,
+    # oznacza to, że n jest fałszerzem. Na 100% złożona.
+    return False
+
+def is_prime(n: int) -> bool:
+    """
+    Główna, deterministyczna funkcja sprawdzająca pierwszość.
+    Zamiast losowych baz, korzysta ze stałego zbioru,
+    który jest gwarantowany matematycznie dla liczb < 3.825 * 10^18.
+    """
+    # Szybki test: parzyste odrzucamy od razu (oprócz dwójki)
+    if n == 2:
+        return True
+    if n % 2 == 0 or n <= 1:
+        return False
+        
+    # Stała lista 9 baz udowodniona przez matematyków dla zakresu z zadania
+    DETERMINISTIC_BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23]
+    
+    for a in DETERMINISTIC_BASES:
+        # Z zasady sprawdzamy tylko bazy mniejsze od naszej liczby
+        if a >= n:
+            break
+            
+        # Jeśli jakakolwiek baza oblała test (znaleziono świadka),
+        # natychmiast przerywamy: liczba jest złożona.
+        if not miller_rabin_round(n, a):
+            return False
+            
+    # Jeśli liczba przetrwała starcie ze wszystkimi 9 bazami,
+    # jesteśmy w 100% pewni, że jest pierwsza.
+    return True
+
+def main() -> None:
+    # Pobranie danych i wypisanie wyniku zgodnie ze schematem zadania
+    n = int(input())
+    if is_prime(n):
+        print("prime")
+    else:
+        print("composite")
+
+if __name__ == "__main__":
+    main()
