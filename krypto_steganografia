@@ -1,0 +1,139 @@
+import numpy as np
+from PIL import Image
+import math
+import io
+import os
+import sys
+import time
+
+# --- MAGICZNA NAPRAWA FOLDERU ---
+# To zmusza Pythona, żeby szukał plików w tym samym folderze, w którym leży ten skrypt!
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# -------------------------------
+
+# ==========================================
+# CZĘŚĆ 1: LOGIKA ALGORYTMU (Narzędzia)
+# ==========================================
+
+def text_to_bits(text):
+    bits = []
+    for char in text:
+        bin_val = format(ord(char), '08b')
+        bits.extend([int(b) for b in bin_val])
+    return bits
+
+def bits_to_text(bits):
+    chars = []
+    for i in range(0, len(bits), 8):
+        byte = bits[i:i+8]
+        if len(byte) < 8: break
+        byte_str = ''.join(map(str, byte))
+        chars.append(chr(int(byte_str, 2)))
+    return "".join(chars)
+
+def embed(image_path, message, output_path):
+    img = Image.open(image_path).convert('RGB')
+    arr = np.array(img, dtype=np.uint8).flatten()
+    bits = text_to_bits(message)
+    
+    if len(bits) > len(arr):
+        raise ValueError("Wiadomość jest zbyt długa dla tego obrazu!")
+        
+    for i in range(len(bits)):
+        arr[i] = (arr[i] & 254) | bits[i]
+        
+    stego_arr = arr.reshape((img.height, img.width, 3))
+    stego_img = Image.fromarray(stego_arr, 'RGB')
+    stego_img.save(output_path, format="PNG")
+
+def extract(stego_path, message_length):
+    img = Image.open(stego_path).convert('RGB')
+    arr = np.array(img, dtype=np.uint8).flatten()
+    total_bits = message_length * 8
+    
+    extracted_bits = [arr[i] & 1 for i in range(total_bits)]
+    return bits_to_text(extracted_bits)
+
+def test_jpeg_compression(stego_path, original_message, qualities):
+    img = Image.open(stego_path)
+    original_bits = text_to_bits(original_message)
+    results = {}
+    
+    for q in qualities:
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=q)
+        buffer.seek(0)
+        
+        jpeg_img = Image.open(buffer).convert('RGB')
+        arr = np.array(jpeg_img, dtype=np.uint8).flatten()
+        extracted_bits = [arr[i] & 1 for i in range(len(original_bits))]
+        
+        correct_bits = sum(1 for a, b in zip(original_bits, extracted_bits) if a == b)
+        results[q] = (correct_bits / len(original_bits)) * 100
+    return results
+
+# ==========================================
+# CZĘŚĆ 2: SKRYPT PREZENTACYJNY NA ZALICZENIE
+# ==========================================
+
+def run_presentation():
+    print("\n" + "="*50)
+    print("   PREZENTACJA PROJEKTU: STEGANOGRAFIA LSB")
+    print("="*50 + "\n")
+    time.sleep(1)
+
+    cover_file = "cover.png"
+    stego_file = "stego.png"
+    
+    # Teraz program na 100% sprawdzi folder, w którym jesteś!
+    if not os.path.exists(cover_file):
+        print(f"[*] UWAGA: Nie znaleziono pliku '{cover_file}' w folderze ze skryptem!")
+        print("[*] Generuję tymczasowy obraz testowy 256x256...")
+        test_img = Image.fromarray(np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8))
+        test_img.save(cover_file)
+    else:
+        print(f"[*] ZNALEZIONO OBRAZ BAZOWY: '{cover_file}'. Używam Twojego zdjęcia!")
+    
+    time.sleep(1.5)
+    
+    tajna_wiadomosc = "To jest tajna wiadomosc na zaliczenie z PVD i LSB. Sprawdzmy czy dziala!"
+    print(f"\n[KROK 1] Ukrywanie wiadomości...")
+    print(f"   -> Treść: '{tajna_wiadomosc}'")
+    
+    embed(cover_file, tajna_wiadomosc, stego_file)
+    print(f"   -> Sukces! Zapisano zmodyfikowany obraz jako: {stego_file}")
+    time.sleep(1.5)
+
+    print(f"\n[KROK 2] Próba odczytania wiadomości z pliku '{stego_file}'...")
+    odczytana_wiadomosc = extract(stego_file, len(tajna_wiadomosc))
+    
+    print(f"   -> Odczytano: '{odczytana_wiadomosc}'")
+    if tajna_wiadomosc == odczytana_wiadomosc:
+        print("   -> WYNIK: ZGODNOŚĆ 100%! Steganografia działa bezstratnie.")
+    else:
+        print("   -> WYNIK: Błąd odczytu.")
+    
+    time.sleep(2)
+
+    print(f"\n[KROK 3] Symulacja ataku / niszczenia danych (Kompresja JPEG)")
+    print("   -> Sprawdzamy, ile bitów przetrwa konwersję PNG -> JPEG -> PNG...")
+    
+    dluga_wiadomosc = "A" * 1000 
+    embed(cover_file, dluga_wiadomosc, stego_file)
+    
+    qualities = [95, 90, 75, 50, 25]
+    wyniki = test_jpeg_compression(stego_file, dluga_wiadomosc, qualities)
+    
+    print("\n   --- TABELA PRZETRWANIA BITÓW ---")
+    print("   | Jakość JPEG | Poprawne bity LSB |")
+    print("   |-------------|-------------------|")
+    for q, acc in wyniki.items():
+        print(f"   |     {q:02d}      |      {acc:.2f}%       |")
+        time.sleep(0.5)
+        
+    print("\n[WNIOSEK]:")
+    print("Format JPEG niszczy LSB (wynik ok. 50% oznacza losowy szum).")
+    print("Steganografia LSB sprawdza się tylko w formatach bezstratnych (PNG, BMP).\n")
+
+if __name__ == "__main__":
+    run_presentation()
