@@ -1,0 +1,225 @@
+import sys
+import math
+
+# ==========================================
+# 1. ROZSZERZONY ALGORYTM EUKLIDESA
+# ==========================================
+def ext_gcd(a, b):
+    """
+    Klasyczny algorytm Euklidesa szuka tylko NWD (Największego Wspólnego Dzielnika).
+    Wersja rozszerzona szuka też współczynników 'x' i 'y' równania: a*x + b*y = NWD.
+    Jest to absolutny fundament do obliczania kluczy prywatnych (odwrotności modularnych).
+    """
+    # Warunek zakończenia rekurencji: jeśli b zeszło do 0, NWD to a.
+    # Wtedy a*1 + b*0 = a, więc x=1, y=0.
+    if b == 0:
+        return a, 1, 0
+    
+    # Rekurencyjnie schodzimy w dół, zamieniając (a, b) na (b, reszta z a/b)
+    g, x1, y1 = ext_gcd(b, a % b)
+    
+    # Odtwarzamy właściwe x i y wracając z rekurencji.
+    # To czysta matematyka wynikająca z Tożsamości Bézouta.
+    x = y1
+    y = x1 - (a // b) * y1
+    
+    return g, x, y
+
+# ==========================================
+# 2. ODWROTNOŚĆ MODULARNA
+# ==========================================
+def mod_inv(a, m):
+    """
+    Szukamy takiej liczby 'x', że (a * x) mod m = 1.
+    Jest to kryptograficzny odpowiednik ułamka (np. odwrotność 3 to 1/3, 
+    ale w kryptografii używamy tylko liczb całkowitych modulo m).
+    """
+    g, x, _ = ext_gcd(a, m)
+    
+    # Odwrotność istnieje tylko wtedy, gdy liczby są względnie pierwsze (NWD = g = 1)
+    if g != 1:
+        return None
+        
+    # Python poprawnie radzi sobie z modulo dla liczb ujemnych.
+    # Jeśli x wyszło ujemne, operacja % m zamieni je na dodatnie (z przedziału 0 do m-1).
+    return x % m
+
+# ==========================================
+# 3. FAKTORYZACJA RSA (ŁAMANIE KLUCZA)
+# ==========================================
+def factor(n):
+    """
+    Rozkłada liczbę 'n' na dwa czynniki pierwsze p i q (takie, że n = p * q).
+    W prawdziwym świecie 'n' ma kilkaset cyfr i ten algorytm by się zawiesił na wieki.
+    Dla małych liczb testowych z zadania, sprawdzamy po kolei możliwe dzielniki.
+    """
+    # Szybkie sprawdzenie, czy n jest parzyste (w RSA rzadko, ale warto uważać)
+    if n % 2 == 0:
+        p, q = 2, n // 2
+        return (p, q) if p <= q else (q, p)
+        
+    # Szukamy tylko do pierwiastka z 'n'. Jeśli 'n' ma dzielniki, 
+    # to co najmniej jeden z nich musi być mniejszy lub równy pierwiastkowi z 'n'.
+    limit = math.isqrt(n) + 1
+    
+    # Skaczemy co 2 (zaczynamy od 3, badamy 5, 7, 9...), pomijając liczby parzyste
+    for i in range(3, limit, 2):
+        if n % i == 0:  # Jeśli i dzieli n bez reszty, mamy pierwszy czynnik!
+            p, q = i, n // i
+            # Zwracamy z zachowaniem kolejności (mniejszy, potem większy)
+            return (p, q) if p <= q else (q, p)
+            
+    return n, 1 # Zwracane, jeśli n jest liczbą pierwszą
+
+def is_prime(n):
+    """
+    Najprostszy test sprawdzający, czy liczba jest pierwsza.
+    Wymagany przez szablon zadania, używa podobnej logiki co factor().
+    """
+    if n < 2: return False
+    if n in (2, 3): return True
+    if n % 2 == 0: return False
+    for i in range(3, math.isqrt(n) + 1, 2):
+        if n % i == 0: return False
+    return True
+
+# ==========================================
+# 4. SZYBKIE POTĘGOWANIE MODULARNE
+# ==========================================
+def modExp(b, e, m):
+    """
+    Liczy (b ^ e) mod m. 
+    Dlaczego nie piszemy po prostu (b ** e) % m?
+    Dlatego, że np. 2369 ^ 2753 to gigantyczna liczba, która zajęłaby cały RAM.
+    Ten algorytm na bieżąco tnie wyniki przy pomocy modulo m, przyspieszając proces logarytmicznie.
+    """
+    res = 1
+    b = b % m # Upewniamy się, że baza jest od razu mniejsza od m
+    
+    # Algorytm oparty na bitach potęgi 'e' (Square-and-Multiply)
+    while e > 0:
+        # Jeśli potęga jest nieparzysta, mnożymy nasz dotychczasowy wynik przez b
+        if e % 2 == 1:
+            res = (res * b) % m
+        
+        # Dzielimy potęgę przez 2 (obcinamy ostatni bit)
+        e = e // 2
+        # Podnosimy 'b' do kwadratu. Z każdym przejściem pętli, 'b' rośnie kwadratowo.
+        b = (b * b) % m
+        
+    return res
+
+# ==========================================
+# 5. DYSKRETNY LOGARYTM (BABY-STEP GIANT-STEP)
+# ==========================================
+def bsgs(g, A, p):
+    """
+    Rozwiązuje równanie: g^x = A (mod p) 
+    szukając wartości 'x'.
+    Zamiast sprawdzać każdy 'x' z osobna (co potrwa ok. p kroków),
+    Dzielimy to na dwie fazy, robiąc max 2*sqrt(p) kroków.
+    """
+    # 1. Określamy wielkość "kroku" - pierwiastek z p
+    m = math.ceil(math.sqrt(p))
+    
+    # 2. BABY STEPS (Małe kroki)
+    lookup = {} # Słownik (hash mapa), działa bardzo szybko do wyszukiwania
+    cur = 1
+    
+    # Generujemy m+1 wartości: g^0, g^1, g^2 ... g^m
+    for j in range(m + 1):
+        # Zapamiętujemy, że dana wartość powstała z potęgi 'j'
+        if cur not in lookup:
+            lookup[cur] = j
+        # Wyliczamy kolejną potęgę mnożąc przez g i używając modulo
+        cur = (cur * g) % p
+        
+    # 3. Przygotowanie do GIANT STEPS (Wielkich kroków)
+    # Potrzebujemy wartości (g^m)^(-1) w ciele modulo p. 
+    g_m = modExp(g, m, p)          # Liczymy g^m
+    g_m_inv = mod_inv(g_m, p)      # Obliczamy jego odwrotność
+    
+    # 4. GIANT STEPS
+    # Sprawdzamy ciąg: A, A*(g^-m)^1, A*(g^-m)^2 ... i tak do 'm'
+    cur = A
+    for i in range(m + 1):
+        # Jeśli aktualna wartość jest w naszym słowniku małych kroków (MAMY KOLIZJĘ!)
+        if cur in lookup:
+            # Wzór na x to: i * m + j (gdzie j to wartość ze słownika)
+            return i * m + lookup[cur]
+            
+        # Wykonujemy "wielki krok" dla następnej iteracji
+        cur = (cur * g_m_inv) % p
+        
+    return None
+
+# ==========================================
+# GŁÓWNA LOGIKA PROGRAMU - PRZETWARZANIE WEJŚCIA
+# ==========================================
+if __name__ == '__main__':
+    # Pobieramy całe wejście i dzielimy je na osobne linijki kodu.
+    # Używamy splitlines(), aby przetwarzać dane wiersz po wierszu.
+    lines = sys.stdin.read().splitlines()
+    # Czyścimy wejście z pustych, technicznych linii z końca pliku
+    lines = [line.strip() for line in lines if line.strip()]
+    
+    if len(lines) >= 4:
+        # ----------------------------------------------------
+        # KROK 1: FAKTORYZACJA i KLUCZ RSA (Linia 1)
+        # ----------------------------------------------------
+        # Wyciągamy 'n' i 'e' i konwertujemy na liczby całkowite
+        n, e = map(int, lines[0].split())
+        
+        # Odtwarzamy czynniki pierwsze
+        p, q = factor(n)
+        
+        # Wyliczamy funkcję Eulera phi(n) - kluczowe dla RSA
+        phi_n = (p - 1) * (q - 1)
+        
+        # Obliczamy klucz prywatny 'd'
+        d = mod_inv(e, phi_n)
+        
+        # Wypisujemy rozwiązanie pierwszego kroku
+        print(f"{p} {q} {d}")
+        
+        # ----------------------------------------------------
+        # KROK 2: DESZYFROWANIE BLOKÓW RSA (Linia 2)
+        # ----------------------------------------------------
+        # Wyciągamy zaszyfrowane bloki (może być ich wiele) z drugiej linii wejścia
+        blocks = list(map(int, lines[1].split()))
+        
+        # Deszyfrujemy każdy blok matematycznie: c^d mod n
+        # Używamy list comprehension dla zwięzłości
+        decrypted_blocks = [modExp(c, d, n) for c in blocks]
+        
+        # Łączymy odszyfrowane liczby spacjami i wypisujemy
+        print(" ".join(map(str, decrypted_blocks)))
+        
+        # ----------------------------------------------------
+        # KROK 3: ŁAMANIE DYSKRETNEGO LOGARYTMU (Linia 3)
+        # ----------------------------------------------------
+        p_bsgs, g_bsgs, A_bsgs = map(int, lines[2].split())
+        
+        # Wywołujemy algorytm BSGS zdefiniowany wyżej
+        x = bsgs(g_bsgs, A_bsgs, p_bsgs)
+        print(x)
+        
+        # ----------------------------------------------------
+        # KROK 4: WERYFIKACJA PODPISU ELGAMALA (Linia 4)
+        # ----------------------------------------------------
+        p2, g2, y, m_el, s1, s2 = map(int, lines[3].split())
+        
+        # Algorytm weryfikacji ElGamala polega na sprawdzeniu, czy:
+        # g^m == (y^s1 * s1^s2) mod p
+        
+        # Lewa strona równania: g^m mod p
+        left_side = modExp(g2, m_el, p2)
+        
+        # Prawa strona: musimy wymnożyć dwa szybkie potęgowania i ponownie zmodulować
+        right_side = (modExp(y, s1, p2) * modExp(s1, s2, p2)) % p2
+        
+        # Weryfikacja: jeśli obie strony są sobie równe, podpis złożyła właściwa osoba.
+        if left_side == right_side:
+            print("valid")
+        else:
+            print("invalid")
