@@ -1,0 +1,66 @@
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
+
+const app = express();
+app.use(express.json());
+app.use(cors()); // Zezwala na połączenia z plików HTML
+
+// Inicjalizacja połączenia z bazą SQLite
+const db = new sqlite3.Database('./baza.db');
+
+// --- ENDPOINTY DLA ADMINISTRATORA (CRUD Kursów) ---
+
+// READ: Pobieranie wszystkich kursów (Dostępne też dla zwykłego użytkownika)
+app.get('/api/courses', (req, res) => {
+    db.all("SELECT * FROM courses", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// CREATE: Dodawanie nowego kursu (Admin)
+app.post('/api/courses', (req, res) => {
+    const { title, category_id } = req.body;
+    db.run("INSERT INTO courses (title, category_id) VALUES (?, ?)", 
+        [title, category_id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, title, category_id });
+    });
+});
+
+// UPDATE: Edycja kursu (Admin)
+app.put('/api/courses/:id', (req, res) => {
+    const { title } = req.body;
+    db.run("UPDATE courses SET title = ? WHERE id = ?", 
+        [title, req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Zaktualizowano pomyślnie" });
+    });
+});
+
+// DELETE: Usuwanie kursu (Admin)
+app.delete('/api/courses/:id', (req, res) => {
+    db.run("DELETE FROM courses WHERE id = ?", req.params.id, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Usunięto pomyślnie" });
+    });
+});
+
+// --- ENDPOINTY DLA ZWYKŁEGO UŻYTKOWNIKA (Funkcjonalność nietrywialna) ---
+
+// Rezerwacja miejsca / Zapisanie się na wydarzenie
+app.post('/api/enroll', (req, res) => {
+    const { userId, courseId } = req.body;
+    // Nietrywialna akcja: zmiana w bazie - przypisanie relacji N:M dla User-Course
+    db.run("INSERT INTO enrollments (user_id, course_id) VALUES (?, ?)", 
+        [userId, courseId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(201).json({ message: "Zapisano na kurs pomyślnie", enrollmentId: this.lastID });
+    });
+});
+
+// Uruchomienie serwera
+app.listen(3000, () => {
+    console.log("Backend nasłuchuje na porcie 3000");
+});
