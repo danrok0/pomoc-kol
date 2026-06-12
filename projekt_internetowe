@@ -1,0 +1,266 @@
+diagramy
+
+
+flowchart LR
+    Klient([Zwykły Użytkownik]) --> (Przeglądanie kursów)
+    Klient --> (Zapisanie się na kurs)
+    Admin([Administrator]) --> (Zarządzanie kursami - CRUD)
+
+
+erDiagram
+    KATEGORIE ||--o{ KURSY : "posiadają"
+    KURSY ||--o{ KURSY_TAGI : "mają"
+    TAGI ||--o{ KURSY_TAGI : "należą do"
+    UZYTKOWNICY ||--o{ ZAPISY : "dokonują"
+    KURSY ||--o{ ZAPISY : "zbierają"
+
+
+-- Tworzymy tabelę logowania (pomijana przy liczeniu wymogu 4 tabel)
+CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, role TEXT);
+
+-- Tabela 1: Kategorie
+CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, name TEXT);
+
+-- Tabela 2: Tagi
+CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, name TEXT);
+
+-- Tabela 3: Kursy (Związek 1:N z kategoriami - ma category_id)
+CREATE TABLE IF NOT EXISTS courses (
+    id INTEGER PRIMARY KEY, 
+    title TEXT, 
+    category_id INTEGER, 
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+);
+
+-- Tabela 4: Łącznik kursów i tagów (Związek N:M)
+CREATE TABLE IF NOT EXISTS course_tags (
+    course_id INTEGER, 
+    tag_id INTEGER, 
+    FOREIGN KEY(course_id) REFERENCES courses(id), 
+    FOREIGN KEY(tag_id) REFERENCES tags(id)
+);
+
+-- Tabela zapisów na kurs (Akcja nietrywialna użytkownika)
+CREATE TABLE IF NOT EXISTS enrollments (
+    id INTEGER PRIMARY KEY, 
+    user_id INTEGER, 
+    course_id INTEGER
+);
+
+-- Wrzucamy do bazy jakieś dane na start, żeby było co wyświetlać
+INSERT INTO users (username, role) VALUES ('admin', 'admin'), ('Kowalski', 'user');
+INSERT INTO categories (name) VALUES ('Programowanie'), ('Języki obce');
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Strona dla Użytkownika</title>
+</head>
+<body>
+    <h1>Dostępne Kursy</h1>
+    <div id="lista-kursow"></div>
+
+    <script>
+        // Zakładamy, że zalogował się użytkownik z ID = 2 (Kowalski)
+        const zalogowanyUzytkownikId = 2; 
+
+        // Funkcja pobierająca dane od "kelnera" (backendu)
+        async function pobierzKursy() {
+            // fetch to zapytanie do serwera (na adres localhost:3000)
+            const odpowiedz = await fetch('http://localhost:3000/api/courses');
+            const kursy = await odpowiedz.json(); // Rozpakowujemy dane
+            
+            // Wyświetlamy każdy kurs na ekranie i dodajemy przycisk
+            const div = document.getElementById('lista-kursow');
+            div.innerHTML = kursy.map(kurs => `
+                <div style="border: 1px solid black; padding: 10px; margin: 5px;">
+                    <h3>${kurs.title}</h3>
+                    <button onclick="zapiszSie(${kurs.id})">Zapisz się na wydarzenie</button>
+                </div>
+            `).join('');
+        }
+
+        // Ta funkcja wykonuje nietrywialną akcję - wysyła rezerwację do bazy
+        async function zapiszSie(idKursu) {
+            await fetch('http://localhost:3000/api/enroll', {
+                method: 'POST', // POST oznacza, że WYSYŁAMY nowe dane
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: zalogowanyUzytkownikId, courseId: idKursu })
+            });
+            alert("Gratulacje! Zapisano na kurs.");
+        }
+        
+        pobierzKursy(); // Uruchamiamy pobieranie od razu po otwarciu strony
+    </script>
+</body>
+</html>
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Administratora</title>
+</head>
+<body>
+    <h1>Panel Administratora (CRUD Kursów)</h1>
+    
+    <h3>Dodaj Nowy Kurs (Create)</h3>
+    <input type="text" id="tytul" placeholder="Wpisz nazwę kursu">
+    
+    <select id="kategoria">
+        <option value="1">Programowanie</option>
+        <option value="2">Języki obce</option>
+    </select>
+    <button onclick="dodaj()">Zapisz w bazie</button>
+
+    <h3>Lista kursów do edycji (Read, Update, Delete)</h3>
+    <ul id="lista"></ul>
+
+    <script>
+        async function odswiezLisie() {
+            const odpowiedz = await fetch('http://localhost:3000/api/courses');
+            const dane = await odpowiedz.json();
+            
+            // Renderujemy listę z przyciskami Usuń i Edytuj
+            document.getElementById('lista').innerHTML = dane.map(kurs => `
+                <li>
+                    <strong>${kurs.title}</strong> 
+                    <button onclick="usun(${kurs.id})">Usuń</button>
+                    <button onclick="edytuj(${kurs.id})">Edytuj nazwę</button>
+                </li>`).join('');
+        }
+
+        async function dodaj() {
+            const nazwa = document.getElementById('tytul').value;
+            const kategoria = document.getElementById('kategoria').value;
+            
+            await fetch('http://localhost:3000/api/courses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: nazwa, category_id: kategoria })
+            });
+            odswiezLisie(); // Odświeża ekran po dodaniu
+        }
+
+        async function usun(id) {
+            // DELETE oznacza, że chcemy coś skasować w bazie
+            await fetch(`http://localhost:3000/api/courses/${id}`, { method: 'DELETE' });
+            odswiezLisie();
+        }
+
+        async function edytuj(id) {
+            const nowaNazwa = prompt("Podaj nową nazwę kursu:");
+            if(nowaNazwa) {
+                // PUT oznacza, że MODYFIKUJEMY (nadpisujemy) istniejące dane
+                await fetch(`http://localhost:3000/api/courses/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: nowaNazwa })
+                });
+                odswiezLisie();
+            }
+        }
+
+        odswiezLisie(); // Odpal przy starcie
+    </script>
+</body>
+</html>
+
+
+
+// Importujemy potrzebne narzędzia pobrane przez npm
+const express = require('express'); // Express to framework do tworzenia serwerów
+const sqlite3 = require('sqlite3').verbose(); // Sterownik do naszej małej bazy danych
+const cors = require('cors'); // CORS pozwala przeglądarce łączyć się z serwerem
+
+// Tworzymy nasz serwer (naszego "kelnera")
+const app = express();
+app.use(express.json()); // Pozwalamy serwerowi rozumieć dane w formacie JSON
+app.use(cors());
+
+// Podłączamy się do bazy danych. Jeśli plik baza.db nie istnieje, zostanie stworzony.
+const db = new sqlite3.Database('./baza.db');
+
+// ==========================================
+// C-R-U-D DLA ADMINISTRATORA
+// ==========================================
+
+// READ (Odczyt): Pobieramy wszystkie kursy z bazy i wysyłamy na stronę
+app.get('/api/courses', (req, res) => {
+    // req = prośba od klienta, res = nasza odpowiedź do klienta
+    db.all("SELECT * FROM courses", [], (blad, wiersze) => {
+        if (blad) return res.status(500).json({ error: blad.message });
+        res.json(wiersze); // Wysyłamy wiersze z bazy na stronę
+    });
+});
+
+// CREATE (Dodawanie): Zapisujemy nowy kurs, który przysłał nam admin
+app.post('/api/courses', (req, res) => {
+    // Wyciągamy tytuł i kategorię z tego, co przyszło z frontendu
+    const { title, category_id } = req.body; 
+    
+    // Znak zapytania (?) to zabezpieczenie przed hakerami (tzw. SQL Injection)
+    db.run("INSERT INTO courses (title, category_id) VALUES (?, ?)", 
+        [title, category_id], function(blad) {
+        if (blad) return res.status(500).json({ error: blad.message });
+        res.json({ message: "Dodano kurs!" });
+    });
+});
+
+// UPDATE (Edycja): Zmieniamy nazwę kursu o konkretnym ID
+app.put('/api/courses/:id', (req, res) => {
+    const { title } = req.body; // Bierzemy nowy tytuł
+    const idKursu = req.params.id; // Bierzemy ID z adresu URL (np. /api/courses/5)
+    
+    db.run("UPDATE courses SET title = ? WHERE id = ?", 
+        [title, idKursu], function(blad) {
+        if (blad) return res.status(500).json({ error: blad.message });
+        res.json({ message: "Zaktualizowano!" });
+    });
+});
+
+// DELETE (Usuwanie): Kasujemy kurs z bazy
+app.delete('/api/courses/:id', (req, res) => {
+    const idKursu = req.params.id;
+    
+    db.run("DELETE FROM courses WHERE id = ?", idKursu, function(blad) {
+        if (blad) return res.status(500).json({ error: blad.message });
+        res.json({ message: "Usunięto pomyślnie" });
+    });
+});
+
+// ==========================================
+// AKCJA UŻYTKOWNIKA (Zapis na wydarzenie)
+// ==========================================
+
+// Użytkownik przesyła nam swoje ID oraz ID kursu, na który się zapisuje
+app.post('/api/enroll', (req, res) => {
+    const { userId, courseId } = req.body;
+    
+    // Tworzymy nowy rekord w tabeli powiązań (rezerwacji)
+    db.run("INSERT INTO enrollments (user_id, course_id) VALUES (?, ?)", 
+        [userId, courseId], function(blad) {
+        if (blad) return res.status(500).json({ error: blad.message });
+        res.status(201).json({ message: "Zapisano użytkownika na kurs!" });
+    });
+});
+
+// Mówimy serwerowi, żeby włączył się i nasłuchiwał na porcie 3000
+app.listen(3000, () => {
+    console.log("Serwer (Backend) działa! Nasłuchuje na porcie 3000...");
+});
+
+
+
+
