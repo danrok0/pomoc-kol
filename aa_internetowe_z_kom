@@ -1,0 +1,469 @@
+//server.js
+
+// ==========================================
+// 1. IMPORTY NARZĘDZI (BIBLIOTEK)
+// ==========================================
+// Express to nasz główny framework do tworzenia serwera w Node.js
+const express = require('express');
+// Moduł do obsługi bazy danych SQLite (verbose pozwala na lepsze wyświetlanie błędów)
+const sqlite3 = require('sqlite3').verbose();
+// Narzędzie do radzenia sobie ze ścieżkami plików na dysku
+const path = require('path');
+
+// Tworzymy główny obiekt naszej aplikacji serwerowej
+const app = express();
+
+// ==========================================
+// 2. KONFIGURACJA SERWERA
+// ==========================================
+// Ta linijka mówi serwerowi: "Jeśli ktoś wejdzie na Twój adres, pokaż mu pliki HTML, które leżą w tym samym folderze co Ty (__dirname)"
+app.use(express.static(__dirname));
+// Ta linijka mówi: "Będziemy wysyłać i odbierać dane w nowoczesnym formacie JSON. Naucz się go czytać."
+app.use(express.json());
+
+// Łączymy się z bazą danych (lub tworzymy plik platforma.db, jeśli jeszcze nie istnieje)
+const db = new sqlite3.Database('./platforma.db');
+
+// ==========================================
+// 3. TWORZENIE STRUKTURY BAZY DANYCH
+// ==========================================
+// db.serialize upewnia się, że zapytania wykonają się po kolei, jedno po drugim
+db.serialize(() => {
+    // TABELA 1: Użytkownicy (Login, Hasło, Rola)
+    db.run("CREATE TABLE IF NOT EXISTS uzytkownicy (id INTEGER PRIMARY KEY, login TEXT UNIQUE, haslo TEXT, rola TEXT)");
+    
+    // TABELA 2 i 3: Kategorie i Tagi (Proste tabele słownikowe)
+    db.run("CREATE TABLE IF NOT EXISTS kategorie (id INTEGER PRIMARY KEY, nazwa TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS tagi (id INTEGER PRIMARY KEY, nazwa TEXT)");
+    
+    // TABELA 4: Kursy (Główna tabela). Zawiera kategoria_id, co tworzy ZWIĄZEK 1:N z kategoriami
+    db.run("CREATE TABLE IF NOT EXISTS kursy (id INTEGER PRIMARY KEY, nazwa TEXT, cena REAL, kategoria_id INTEGER, FOREIGN KEY(kategoria_id) REFERENCES kategorie(id))");
+    
+    // TABELA 5: Tabela pośrednia. Tworzy ZWIĄZEK N:M między kursami a tagami
+    db.run("CREATE TABLE IF NOT EXISTS kursy_tagi (kurs_id INTEGER, tag_id INTEGER, FOREIGN KEY(kurs_id) REFERENCES kursy(id), FOREIGN KEY(tag_id) REFERENCES tagi(id))");
+    
+    // TABELA 6 i 7: Logika zamówień (ZWIĄZEK 1:N - Jedno zamówienie ma wiele pozycji)
+    db.run("CREATE TABLE IF NOT EXISTS zamowienia (id INTEGER PRIMARY KEY, uzytkownik_id INTEGER, data TEXT, suma REAL, FOREIGN KEY(uzytkownik_id) REFERENCES uzytkownicy(id))");
+    db.run("CREATE TABLE IF NOT EXISTS pozycje_zamowienia (id INTEGER PRIMARY KEY, zamowienie_id INTEGER, kurs_id INTEGER, FOREIGN KEY(zamowienie_id) REFERENCES zamowienia(id), FOREIGN KEY(kurs_id) REFERENCES kursy(id))");
+
+    // WSTAWIANIE DANYCH STARTOWYCH (Opcja IGNORE zapobiega dublowaniu danych przy restarcie serwera)
+    // Tworzymy konta do logowania: admin/admin123 oraz klient/klient123
+    db.run("INSERT OR IGNORE INTO uzytkownicy (login, haslo, rola) VALUES ('admin', 'admin123', 'admin'), ('klient', 'klient123', 'user')");
+    // Tworzymy dwie domyślne kategorie, żeby administrator miał z czego wybierać
+    db.run("INSERT OR IGNORE INTO kategorie (id, nazwa) VALUES (1, 'Programowanie'), (2, 'Biznes i Marketing')");
+});
+
+// ==========================================
+// 4. API - ENDPOINTY (Trasy, po których komunikuje się Frontend z Backendem)
+// ==========================================
+
+// --- ENDPOINT LOGOWANIA ---
+app.post('/api/login', (req, res) => {
+    // Wyciągamy login i hasło, które użytkownik wpisał w przeglądarce (req.body)
+    const { login, haslo } = req.body;
+    // Szukamy w bazie użytkownika, który ma dokładnie taki login i hasło (znaki zapytania chronią przed hakerami - SQL Injection)
+    db.get("SELECT id, login, rola FROM uzytkownicy WHERE login = ? AND haslo = ?", [login, haslo], (err, row) => {
+        if (row) {
+            // Jeśli znaleziono, odsyłamy sukces i dane użytkownika
+            res.json({ success: true, user: row }); 
+        } else {
+            // Jeśli nie, odsyłamy błąd 401 (Brak autoryzacji)
+            res.status(401).json({ success: false, message: "Nieprawidłowy login lub hasło." });
+        }
+    });
+});
+
+// --- API DLA ADMINISTRATORA (CRUD: CREATE, READ, UPDATE, DELETE) ---
+
+// READ (Pobieranie): Odsyła listę kursów z ładnie doklejoną nazwą kategorii
+app.get('/api/kursy', (req, res) => {
+    // Używamy JOIN, żeby zamiast "kategoria_id = 1" otrzymać słowo "Programowanie"
+    const sql = `SELECT k.id, k.nazwa, k.cena, k.kategoria_id, kat.nazwa as kategoria_nazwa 
+                 FROM kursy k JOIN kategorie kat ON k.kategoria_id = kat.id`;
+    db.all(sql, [], (err, rows) => res.json(rows || []));
+});
+
+// CREATE (Dodawanie): Administrator dodaje nowy kurs
+app.post('/api/kursy', (req, res) => {
+    const { nazwa, cena, kategoria_id } = req.body; // Pobieramy dane z formularza
+    db.run("INSERT INTO kursy (nazwa, cena, kategoria_id) VALUES (?, ?, ?)", [nazwa, cena, kategoria_id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ komunikat: "Dodano kurs" }); // Informujemy przeglądarkę, że się udało
+    });
+});
+
+// UPDATE (Edycja): Zmiana nazwy lub ceny
+app.put('/api/kursy/:id', (req, res) => {
+    const { nazwa, cena } = req.body;
+    // req.params.id wyciąga ID kursu końcówki adresu (np. z /api/kursy/5 wyciągnie 5)
+    db.run("UPDATE kursy SET nazwa = ?, cena = ? WHERE id = ?", [nazwa, cena, req.params.id], () => {
+        res.json({ komunikat: "Zaktualizowano kurs" });
+    });
+});
+
+// DELETE (Usuwanie): Skasowanie kursu z bazy
+app.delete('/api/kursy/:id', (req, res) => {
+    // Zanim usuniemy kurs, musimy usunąć go z historii zamówień, żeby baza się nie wysypała (integralność relacji)
+    db.run("DELETE FROM pozycje_zamowienia WHERE kurs_id = ?", req.params.id); 
+    // Następnie kasujemy sam kurs
+    db.run("DELETE FROM kursy WHERE id = ?", req.params.id, () => {
+        res.json({ komunikat: "Usunięto kurs" });
+    });
+});
+
+// --- API DLA UŻYTKOWNIKA (AKCJA NIETRYWIALNA - KOSZYK I ZAMÓWIENIE) ---
+
+app.post('/api/zamowienia', (req, res) => {
+    // Odbieramy całą paczkę z przeglądarki: kto kupuje, tablicę z koszykiem i łączną sumę
+    const { uzytkownik_id, koszyk, suma } = req.body;
+    const dataZamowienia = new Date().toISOString(); // Generujemy obecną datę i czas
+    
+    // KROK 1: Tworzymy "Nagłówek paragonu" (Ogólne dane zamówienia)
+    db.run("INSERT INTO zamowienia (uzytkownik_id, data, suma) VALUES (?, ?, ?)", [uzytkownik_id, dataZamowienia, suma], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        // this.lastID to numer (ID) zamówienia, które przed chwilą stworzyliśmy
+        const zamowienieId = this.lastID; 
+        
+        // KROK 2: Przygotowujemy maszynkę do wrzucania wielu pozycji do bazy
+        const stmt = db.prepare("INSERT INTO pozycje_zamowienia (zamowienie_id, kurs_id) VALUES (?, ?)");
+        
+        // Przechodzimy pętlą przez każdy kurs w koszyku i przypisujemy go do tego zamówienia
+        koszyk.forEach(item => {
+            stmt.run([zamowienieId, item.id]);
+        });
+        stmt.finalize(); // Zamykamy maszynkę
+
+        // Gdy wszystko się wykona, informujemy przeglądarkę o wielkim sukcesie
+        res.json({ success: true, message: "Zamówienie złożone pomyślnie!" });
+    });
+});
+
+// ==========================================
+// 5. URUCHOMIENIE SERWERA
+// ==========================================
+app.listen(3000, () => {
+    console.log("Serwer działa na porcie 3000! Nasłuchiwanie włączone.");
+});
+
+//index.html
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Logowanie - System Edukacyjny</title>
+    <style>
+        body { font-family: sans-serif; background: #2c3e50; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #34495e; padding: 40px; border-radius: 10px; width: 300px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { width: 100%; padding: 10px; background: #2980b9; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #3498db; }
+        .error { color: #e74c3c; margin-top: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>Logowanie</h2>
+        <p style="font-size: 12px; color: #bdc3c7;">Admin: admin / admin123<br>Użytkownik: klient / klient123</p>
+        
+        <input type="text" id="login" placeholder="Wpisz Login">
+        <input type="password" id="haslo" placeholder="Wpisz Hasło">
+        
+        <button onclick="zaloguj()">Zaloguj się</button>
+        
+        <div id="msg" class="error"></div>
+    </div>
+
+    <script>
+        // Zawsze, gdy wejdziemy na stronę logowania, kasujemy pamięć przeglądarki (wylogowujemy się)
+        localStorage.removeItem('user');
+
+        async function zaloguj() {
+            // Wyciągamy to, co wpisał użytkownik
+            const login = document.getElementById('login').value;
+            const haslo = document.getElementById('haslo').value;
+            
+            // fetch służy do wysłania tych danych do naszego serwera (pliku server.js) pod adres /api/login
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login, haslo })
+            });
+            
+            // Odbieramy odpowiedź serwera
+            const data = await res.json();
+
+            // Jeśli serwer sprawdził bazę i odpisał "success: true"
+            if (data.success) {
+                // Zapisujemy w przeglądarce na stałe, że jesteśmy zalogowani i kim jesteśmy (dane user z bazy)
+                localStorage.setItem('user', JSON.stringify(data.user));
+                
+                // Sprawdzamy, czy użytkownik ma rolę admin. Jeśli tak, otwieramy admin.html
+                if (data.user.rola === 'admin') {
+                    window.location.href = 'admin.html';
+                } else {
+                    // W przeciwnym razie otwieramy stronę sklepu (user.html)
+                    window.location.href = 'user.html';
+                }
+            } else {
+                // Jeśli hasło było złe, wypisujemy to na ekranie
+                document.getElementById('msg').innerText = data.message;
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+//user.html
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Sklep z Kursami - Użytkownik</title>
+    <style>
+        /* Prosty i czysty CSS. Układ dzielący stronę na dwie kolumny (flexbox): Oferta z lewej, Koszyk z prawej */
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; max-width: 1000px; margin: auto; display: flex; gap: 20px; }
+        .oferta { flex: 2; }
+        .koszyk { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); height: fit-content; }
+        .card { background: white; padding: 15px; margin-bottom: 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        button { background: #2980b9; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px; font-weight: bold;}
+        button:hover { background: #3498db; }
+        .btn-checkout { background: #27ae60; width: 100%; padding: 15px; font-size: 16px; margin-top: 15px; }
+        .btn-checkout:hover { background: #2ecc71; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 8px 0; border-bottom: 1px dashed #ccc; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+    <div class="oferta">
+        <div style="display: flex; justify-content: space-between;">
+            <h2 id="powitanie">Oferta Kursów</h2>
+            <a href="index.html" style="color: red; text-decoration: none; margin-top: 25px; font-weight: bold;">Wyloguj się</a>
+        </div>
+        <div id="lista-kursow"></div>
+    </div>
+
+    <div class="koszyk">
+        <h3>Twój Wirtualny Koszyk</h3>
+        <ul id="lista-koszyka">
+            </ul>
+        <h3 style="text-align: right; border-top: 2px solid #eee; padding-top: 10px;">
+            Suma: <span id="suma">0.00</span> PLN
+        </h3>
+        <button class="btn-checkout" onclick="zlozZamowienie()">💳 Złóż zamówienie</button>
+    </div>
+
+    <script>
+        // --- ZABEZPIECZENIE STRONY I POWITANIE ---
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.rola !== 'user') {
+            alert('Ta strona jest dostępna tylko dla zalogowanych Klientów!');
+            window.location.href = 'index.html';
+        }
+        // Pobieramy login z danych sesji i wyświetlamy na ekranie
+        document.getElementById('powitanie').innerText = `Witaj, ${user.login}! Dedykowana oferta:`;
+
+        // Pusta tablica, która będzie trzymała na żywo wszystkie kliknięte kursy
+        let koszyk = [];
+
+        // --- POBIERANIE OFERTY KURSÓW (Działa tak samo jak u admina, tylko wypluwa ładniejsze karty) ---
+        async function laduj() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            document.getElementById('lista-kursow').innerHTML = kursy.map(k => `
+                <div class="card">
+                    <div>
+                        <strong style="font-size: 1.2em;">${k.nazwa}</strong><br>
+                        <small style="color: #7f8c8d;">Kategoria: ${k.kategoria_nazwa}</small>
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <span style="font-weight:bold; margin-right: 15px; font-size: 1.1em;">${k.cena} PLN</span>
+                        <button onclick="dodajDoKoszyka(${k.id}, '${k.nazwa}', ${k.cena})">Dodaj do koszyka +</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- LOGIKA KOSZYKA (Frontend) ---
+        function dodajDoKoszyka(id, nazwa, cena) {
+            // Funkcja push dokleja nowy przedmiot na koniec tablicy koszyka
+            koszyk.push({ id: id, nazwa: nazwa, cena: cena });
+            // Za każdym razem jak coś dodamy, każemy stronie narysować koszyk od nowa
+            odswiezKoszyk();
+        }
+
+        function odswiezKoszyk() {
+            const lista = document.getElementById('lista-koszyka');
+            let wyliczonaSuma = 0; // Zaczynamy liczyć od 0 PLN
+            
+            // Przechodzimy przez naszą tablicę z dodanymi kursami...
+            lista.innerHTML = koszyk.map(item => {
+                wyliczonaSuma += item.cena; // Dodajemy cenę do bieżącego rachunku
+                // Formatujemy wygląd przedmiotu w koszyku
+                return `<li><span>🛒 ${item.nazwa}</span> <strong>${item.cena} PLN</strong></li>`;
+            }).join('');
+            
+            // Wyświetlamy całkowitą sumę do zapłaty na ekranie, zawsze z dwoma miejscami po przecinku (toFixed(2))
+            document.getElementById('suma').innerText = wyliczonaSuma.toFixed(2);
+        }
+
+        // --- ZŁOŻENIE ZAMÓWIENIA (Wysłanie koszyka do bazy danych na backend) ---
+        async function zlozZamowienie() {
+            // Zabezpieczenie przed kliknięciem kup, gdy niczego nie wybrano
+            if (koszyk.length === 0) return alert('Twój koszyk jest pusty! Dodaj najpierw jakiś kurs.');
+            
+            // reduce to funkcja matematyczna, która po prostu sumuje ceny z całego koszyka (drugi raz dla bezpieczeństwa przed wysyłką)
+            let suma = koszyk.reduce((total, item) => total + item.cena, 0);
+
+            // Wysyłamy jedną, dużą paczkę danych do serwera
+            const res = await fetch('/api/zamowienia', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    uzytkownik_id: user.id, // Kto kupuje? (ID zalogowanego klienta)
+                    koszyk: koszyk,         // Co kupuje? (Cała tablica ze wszystkimi produktami z koszyka)
+                    suma: suma              // Ile ma zapłacić?
+                })
+            });
+
+            const data = await res.json();
+            // Jeśli serwer pomyślnie przetworzył i zapisał tę masę danych w kilku tabelach:
+            if (data.success) {
+                alert('Dziękujemy! Twoje zamówienie zostało trwale zapisane w naszej bazie danych.');
+                koszyk = []; // Opróżniamy koszyk
+                odswiezKoszyk(); // Czyścimy ekran z prawej strony
+            }
+        }
+
+        // Ładujemy kursy z bazy przy otwarciu strony
+        laduj();
+    </script>
+</body>
+</html>
+
+
+
+
+
+//admin.html
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Administratora</title>
+    <style>
+        body { font-family: sans-serif; background: #ecf0f1; padding: 20px; max-width: 900px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
+        button { background: #e67e22; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; margin-right: 5px; }
+        .btn-add { background: #27ae60; padding: 10px 15px; }
+        input, select { padding: 8px; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div style="display: flex; justify-content: space-between;">
+        <h2>Witaj, Administratorze</h2>
+        <a href="index.html" style="color: red; text-decoration: none; font-weight: bold;">Wyloguj</a>
+    </div>
+
+    <div class="card">
+        <h3>Dodaj Nowy Kurs</h3>
+        <input type="text" id="nazwa" placeholder="Podaj nazwę kursu">
+        <input type="number" id="cena" placeholder="Podaj cenę w PLN">
+        <select id="kategoria">
+            <option value="1">Programowanie</option>
+            <option value="2">Biznes i Marketing</option>
+        </select>
+        <button class="btn-add" onclick="dodaj()">Zapisz do bazy</button>
+    </div>
+
+    <div class="card">
+        <h3>Baza Kursów (Zarządzanie)</h3>
+        <table id="tabela-kursow">
+            <tr><th>Nazwa</th><th>Kategoria</th><th>Cena</th><th>Akcje</th></tr>
+        </table>
+    </div>
+
+    <script>
+        // --- ZABEZPIECZENIE STRONY ---
+        // Pobieramy dane z pamięci przeglądarki. Jeśli kogoś tam nie ma lub ma rolę inną niż admin...
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.rola !== 'admin') {
+            alert('Brak uprawnień do przeglądania tej strony!'); // Wyświetlamy błąd
+            window.location.href = 'index.html'; // Wyrzucamy gościa z powrotem na stronę logowania
+        }
+
+        // --- READ: Funkcja pobierająca listę kursów z serwera i rysująca tabelkę ---
+        async function laduj() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            const tab = document.getElementById('tabela-kursow');
+            
+            // Tworzymy nagłówki tabeli...
+            tab.innerHTML = '<tr><th>Nazwa</th><th>Kategoria</th><th>Cena</th><th>Akcje</th></tr>' + 
+                // ...a następnie dla każdego kursu doklejamy nowy wiersz (<tr>) z danymi
+                kursy.map(k => `
+                <tr>
+                    <td>${k.nazwa}</td>
+                    <td>${k.kategoria_nazwa}</td>
+                    <td>${k.cena} PLN</td>
+                    <td>
+                        <button onclick="edytuj(${k.id}, '${k.nazwa}', ${k.cena})">Edytuj</button>
+                        <button onclick="usun(${k.id})" style="background:#e74c3c;">Usuń</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        // --- CREATE: Wysyłanie nowego kursu na serwer ---
+        async function dodaj() {
+            // Zczytujemy to co admin wpisał w pola na ekranie
+            const nazwa = document.getElementById('nazwa').value;
+            const cena = document.getElementById('cena').value;
+            const kategoria_id = document.getElementById('kategoria').value;
+            
+            // Wysyłamy prośbę POST z nowymi danymi (parsowanie ceny na liczbę zmiennoprzecinkową parseFloat)
+            await fetch('/api/kursy', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({nazwa: nazwa, cena: parseFloat(cena), kategoria_id: kategoria_id})
+            });
+            // Czyścimy pole nazwy i odświeżamy tabelkę widoczną na ekranie
+            document.getElementById('nazwa').value = ""; 
+            document.getElementById('cena').value = "";
+            laduj();
+        }
+
+        // --- UPDATE: Zmiana parametrów kursu (wyskakujące okienko prompt) ---
+        async function edytuj(id, staraNazwa, staraCena) {
+            // Pytamy admina o nową nazwę i cenę (w oknie wpisana jest domyślnie stara wartość)
+            const nowaNazwa = prompt("Nowa nazwa kursu:", staraNazwa);
+            const nowaCena = prompt("Nowa cena PLN:", staraCena);
+            
+            // Jeśli podał dane i nie kliknął "Anuluj"
+            if(nowaNazwa && nowaCena) {
+                // Wysyłamy prośbę PUT, która mówi "nadpisz kurs o tym konkretnym ID"
+                await fetch('/api/kursy/' + id, {
+                    method: 'PUT', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nazwa: nowaNazwa, cena: parseFloat(nowaCena)})
+                });
+                laduj(); // Odświeżamy ekran po zapisaniu w bazie
+            }
+        }
+
+        // --- DELETE: Skasowanie kursu z bazy ---
+        async function usun(id) {
+            // Używamy metody DELETE w żądaniu sieciowym, podając ID wybranego kursu na końcu adresu
+            await fetch('/api/kursy/' + id, { method: 'DELETE' });
+            laduj(); // Odświeżamy ekran po skasowaniu
+        }
+
+        // Przy pierwszym uruchomieniu strony wywołujemy od razu pobranie danych
+        laduj();
+    </script>
+</body>
+</html>
