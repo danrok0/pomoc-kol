@@ -1,0 +1,240 @@
+index
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Strona Użytkownika</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; color: #333; max-width: 900px; margin: 40px auto; padding: 20px; }
+        h1 { text-align: center; color: #2c3e50; font-size: 2.5em; margin-bottom: 40px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+        .card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); }
+        .card h3 { color: #2980b9; margin-top: 0; }
+        .badge { display: inline-block; background: #ecf0f1; padding: 5px 10px; border-radius: 20px; font-size: 12px; color: #7f8c8d; margin-bottom: 15px; font-weight: bold; }
+        button { background-color: #27ae60; color: white; border: none; padding: 12px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+        button:hover { background-color: #2ecc71; }
+        nav { text-align: center; margin-bottom: 30px; }
+        nav a { text-decoration: none; color: #e67e22; font-weight: bold; font-size: 1.1em; }
+    </style>
+</head>
+<body>
+    <nav><a href="admin.html">⚙️ Przejdź do panelu administratora</a></nav>
+    <h1>Dostępne Szkolenia w Systemie</h1>
+    
+    <div id="miejsce-na-kursy" class="grid">
+        <p style="text-align:center; width: 100%;">Ładowanie kursów z bazy danych...</p>
+    </div>
+
+    <script>
+        async function pokazKursy() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            const kontener = document.getElementById('miejsce-na-kursy');
+
+            if(kursy.length === 0) {
+                kontener.innerHTML = "<p style='text-align:center; width: 100%; color: #7f8c8d;'>Brak dostępnych kursów. Administrator musi je najpierw dodać.</p>";
+                return;
+            }
+
+            kontener.innerHTML = kursy.map(kurs => `
+                <div class="card">
+                    <h3>${kurs.nazwa}</h3>
+                    <div class="badge">${kurs.kategoria_id === 1 ? '💻 Programowanie' : '🌍 Języki Obce'}</div>
+                    <button onclick="rezerwuj(${kurs.id})">✅ Zapisz się na wydarzenie</button>
+                </div>
+            `).join('');
+        }
+
+        async function rezerwuj(idKursu) {
+            await fetch('/api/zapisy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_kursu: idKursu, id_uzytkownika: 2 }) // ID zalogowanego usera
+            });
+            alert("🎉 Super! Twoja rezerwacja została pomyślnie zapisana w bazie danych.");
+        }
+
+        pokazKursy();
+    </script>
+</body>
+</html>
+
+
+
+admin
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Administratora</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; max-width: 800px; margin: 40px auto; padding: 20px; }
+        h1, h3 { color: #2c3e50; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, select, button { padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        button { background-color: #3498db; color: white; border: none; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #2980b9; }
+        .btn-danger { background-color: #e74c3c; }
+        .btn-danger:hover { background-color: #c0392b; }
+        .btn-edit { background-color: #f1c40f; color: #333; }
+        .btn-edit:hover { background-color: #f39c12; }
+        ul { list-style-type: none; padding: 0; }
+        li { background: #ecf0f1; margin: 10px 0; padding: 15px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        nav { margin-bottom: 20px; }
+        nav a { text-decoration: none; color: #3498db; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav><a href="index.html">← Przejdź do panelu użytkownika</a></nav>
+    <h1>Panel Administratora (Zarządzanie)</h1>
+    
+    <div class="card">
+        <h3>Dodaj nowy kurs</h3>
+        <input type="text" id="nazwa_nowego" placeholder="Wpisz nazwę kursu..." style="width: 50%;">
+        <select id="kategoria_nowego">
+            <option value="1">Programowanie</option>
+            <option value="2">Języki Obce</option>
+        </select>
+        <button onclick="zapiszNowy()">➕ Dodaj do bazy</button>
+    </div>
+
+    <div class="card">
+        <h3>Lista kursów w bazie</h3>
+        <ul id="lista-kursow">
+            <li>Ładowanie danych...</li>
+        </ul>
+    </div>
+
+    <script>
+        async function odswiez() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            const lista = document.getElementById('lista-kursow');
+            
+            if(kursy.length === 0) {
+                lista.innerHTML = "<li>Brak kursów w bazie. Dodaj jakiś powyżej!</li>";
+                return;
+            }
+
+            lista.innerHTML = kursy.map(kurs => `
+                <li>
+                    <span><strong>${kurs.nazwa}</strong> (Kat: ${kurs.kategoria_id === 1 ? 'Programowanie' : 'Języki Obce'})</span>
+                    <div>
+                        <button class="btn-edit" onclick="edytuj(${kurs.id}, '${kurs.nazwa}')">✏️ Edytuj</button>
+                        <button class="btn-danger" onclick="usun(${kurs.id})">🗑️ Usuń</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        async function zapiszNowy() {
+            const nazwa = document.getElementById('nazwa_nowego').value;
+            const kat_id = document.getElementById('kategoria_nowego').value;
+            
+            if(!nazwa) return alert("Musisz podać nazwę kursu!");
+
+            await fetch('/api/kursy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nazwa: nazwa, kategoria_id: parseInt(kat_id) })
+            });
+            document.getElementById('nazwa_nowego').value = ""; // Czyści pole tekstowe
+            odswiez();
+        }
+
+        async function usun(id) {
+            if(confirm("Na pewno chcesz usunąć ten kurs z bazy?")) {
+                await fetch('/api/kursy/' + id, { method: 'DELETE' });
+                odswiez();
+            }
+        }
+
+        async function edytuj(id, staraNazwa) {
+            const nowaNazwa = prompt("Wpisz nową nazwę kursu:", staraNazwa);
+            if (nowaNazwa && nowaNazwa.trim() !== "") {
+                await fetch('/api/kursy/' + id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nazwa: nowaNazwa })
+                });
+                odswiez();
+            }
+        }
+
+        odswiez();
+    </script>
+</body>
+</html>
+
+
+
+server
+
+
+const express = require('express'); 
+const sqlite3 = require('sqlite3').verbose(); 
+const path = require('path');
+
+const app = express(); 
+
+// To pozwala nam czytać pliki HTML i format JSON
+app.use(express.static(__dirname)); 
+app.use(express.json()); 
+
+const db = new sqlite3.Database('./baza.db');
+
+// Inicjalizacja bazy
+db.serialize(() => {
+    db.run("CREATE TABLE IF NOT EXISTS uzytkownicy (id INTEGER PRIMARY KEY, login TEXT, rola TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS kategorie (id INTEGER PRIMARY KEY, nazwa TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS tagi (id INTEGER PRIMARY KEY, nazwa TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS kursy (id INTEGER PRIMARY KEY, nazwa TEXT, kategoria_id INTEGER)");
+    db.run("CREATE TABLE IF NOT EXISTS kursy_tagi (kurs_id INTEGER, tag_id INTEGER)");
+    db.run("CREATE TABLE IF NOT EXISTS zapisy (id INTEGER PRIMARY KEY, uzytkownik_id INTEGER, kurs_id INTEGER)");
+
+    db.run("INSERT OR IGNORE INTO kategorie (id, nazwa) VALUES (1, 'Programowanie'), (2, 'Języki Obce')");
+});
+
+// --- API ---
+
+app.get('/api/kursy', (req, res) => {
+    db.all("SELECT * FROM kursy", [], (blad, wyniki) => {
+        res.json(wyniki || []);
+    });
+});
+
+app.post('/api/kursy', (req, res) => {
+    const { nazwa, kategoria_id } = req.body;
+    db.run("INSERT INTO kursy (nazwa, kategoria_id) VALUES (?, ?)", [nazwa, kategoria_id], function(blad) {
+        res.json({ komunikat: "Zapisano", id: this.lastID });
+    });
+});
+
+app.put('/api/kursy/:id', (req, res) => {
+    const { nazwa } = req.body;
+    db.run("UPDATE kursy SET nazwa = ? WHERE id = ?", [nazwa, req.params.id], () => {
+        res.json({ komunikat: "Zaktualizowano" });
+    });
+});
+
+app.delete('/api/kursy/:id', (req, res) => {
+    db.run("DELETE FROM kursy WHERE id = ?", req.params.id, () => {
+        res.json({ komunikat: "Usunięto" });
+    });
+});
+
+app.post('/api/zapisy', (req, res) => {
+    const { id_kursu, id_uzytkownika } = req.body;
+    db.run("INSERT INTO zapisy (uzytkownik_id, kurs_id) VALUES (?, ?)", [id_uzytkownika, id_kursu], () => {
+        res.json({ komunikat: "Zapisano rezerwację" });
+    });
+});
+
+app.listen(3000, () => {
+    console.log("Serwer działa na porcie 3000!");
+});
+
