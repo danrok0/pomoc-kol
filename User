@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Sklep z Kursami</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; max-width: 1000px; margin: auto; display: flex; gap: 20px; }
+        .oferta { flex: 2; }
+        .koszyk { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); height: fit-content; }
+        .card { background: white; padding: 15px; margin-bottom: 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+        button { background: #2980b9; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px; }
+        .btn-checkout { background: #27ae60; width: 100%; padding: 15px; font-size: 16px; margin-top: 15px; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 5px 0; border-bottom: 1px dashed #ccc; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+    <div class="oferta">
+        <div style="display: flex; justify-content: space-between;">
+            <h2 id="powitanie">Oferta Kursów</h2>
+            <a href="index.html" style="color: red; text-decoration: none; margin-top: 25px; font-weight: bold;">Wyloguj</a>
+        </div>
+        <div id="lista-kursow"></div>
+    </div>
+
+    <div class="koszyk">
+        <h3>Twój Koszyk</h3>
+        <ul id="lista-koszyka"></ul>
+        <h3 style="text-align: right;">Suma: <span id="suma">0</span> PLN</h3>
+        <button class="btn-checkout" onclick="zlozZamowienie()">💳 Złóż zamówienie</button>
+    </div>
+
+    <script>
+        // Weryfikacja logowania
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.rola !== 'user') {
+            alert('Proszę się zalogować!');
+            window.location.href = 'index.html';
+        }
+        document.getElementById('powitanie').innerText = `Witaj, ${user.login}! Oferta dla Ciebie:`;
+
+        let koszyk = [];
+
+        async function laduj() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            document.getElementById('lista-kursow').innerHTML = kursy.map(k => `
+                <div class="card">
+                    <div>
+                        <strong>${k.nazwa}</strong><br>
+                        <small>${k.kategoria_nazwa}</small>
+                    </div>
+                    <div>
+                        <span style="font-weight:bold; margin-right: 15px;">${k.cena} PLN</span>
+                        <button onclick="dodajDoKoszyka(${k.id}, '${k.nazwa}', ${k.cena})">+ Koszyk</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function dodajDoKoszyka(id, nazwa, cena) {
+            koszyk.push({ id, nazwa, cena });
+            odswiezKoszyk();
+        }
+
+        function odswiezKoszyk() {
+            const lista = document.getElementById('lista-koszyka');
+            let suma = 0;
+            lista.innerHTML = koszyk.map(item => {
+                suma += item.cena;
+                return `<li><span>${item.nazwa}</span> <span>${item.cena} PLN</span></li>`;
+            }).join('');
+            document.getElementById('suma').innerText = suma.toFixed(2);
+        }
+
+        async function zlozZamowienie() {
+            if (koszyk.length === 0) return alert('Koszyk jest pusty!');
+            
+            let suma = koszyk.reduce((total, item) => total + item.cena, 0);
+
+            const res = await fetch('/api/zamowienia', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // Wysyłamy koszyk (tablicę) do bazy danych
+                body: JSON.stringify({ uzytkownik_id: user.id, koszyk: koszyk, suma: suma })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert('Dziękujemy! Zamówienie zostało zapisane w bazie danych.');
+                koszyk = [];
+                odswiezKoszyk();
+            }
+        }
+
+        laduj();
+    </script>
+</body>
+</html>
