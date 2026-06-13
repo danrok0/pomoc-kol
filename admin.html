@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Administratora</title>
+    <style>
+        body { font-family: sans-serif; background: #ecf0f1; padding: 20px; max-width: 900px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
+        button { background: #e67e22; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+        .btn-add { background: #27ae60; padding: 10px 15px; }
+        input, select { padding: 8px; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div style="display: flex; justify-content: space-between;">
+        <h2>Witaj, Administratorze</h2>
+        <a href="index.html" style="color: red; text-decoration: none; font-weight: bold;">Wyloguj</a>
+    </div>
+
+    <div class="card">
+        <h3>Dodaj Kurs</h3>
+        <input type="text" id="nazwa" placeholder="Nazwa kursu">
+        <input type="number" id="cena" placeholder="Cena PLN">
+        <select id="kategoria">
+            <option value="1">Programowanie</option>
+            <option value="2">Biznes i Marketing</option>
+        </select>
+        <button class="btn-add" onclick="dodaj()">Zapisz do bazy</button>
+    </div>
+
+    <div class="card">
+        <h3>Baza Kursów (CRUD)</h3>
+        <table id="tabela-kursow">
+            <tr><th>Nazwa</th><th>Kategoria</th><th>Cena</th><th>Akcje</th></tr>
+        </table>
+    </div>
+
+    <script>
+        // Zabezpieczenie strony
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.rola !== 'admin') {
+            alert('Brak uprawnień!');
+            window.location.href = 'index.html';
+        }
+
+        async function laduj() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            const tab = document.getElementById('tabela-kursow');
+            tab.innerHTML = '<tr><th>Nazwa</th><th>Kategoria</th><th>Cena</th><th>Akcje</th></tr>' + 
+                kursy.map(k => `
+                <tr>
+                    <td>${k.nazwa}</td>
+                    <td>${k.kategoria_nazwa}</td>
+                    <td>${k.cena} PLN</td>
+                    <td>
+                        <button onclick="edytuj(${k.id}, '${k.nazwa}', ${k.cena})">Edytuj</button>
+                        <button onclick="usun(${k.id})" style="background:#e74c3c;">Usuń</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        async function dodaj() {
+            const nazwa = document.getElementById('nazwa').value;
+            const cena = document.getElementById('cena').value;
+            const kategoria_id = document.getElementById('kategoria').value;
+            await fetch('/api/kursy', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({nazwa, cena: parseFloat(cena), kategoria_id})
+            });
+            laduj();
+        }
+
+        async function edytuj(id, staraNazwa, staraCena) {
+            const nowaNazwa = prompt("Nowa nazwa:", staraNazwa);
+            const nowaCena = prompt("Nowa cena:", staraCena);
+            if(nowaNazwa && nowaCena) {
+                await fetch('/api/kursy/'+id, {
+                    method: 'PUT', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nazwa: nowaNazwa, cena: parseFloat(nowaCena)})
+                });
+                laduj();
+            }
+        }
+
+        async function usun(id) {
+            await fetch('/api/kursy/'+id, { method: 'DELETE' });
+            laduj();
+        }
+
+        laduj();
+    </script>
+</body>
+</html>
