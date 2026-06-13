@@ -1,0 +1,20 @@
+erDiagram
+    CATEGORIES ||--o{ COURSES : "posiada"
+    COURSES ||--o{ COURSE_TAGS : "ma przypisane"
+    TAGS ||--o{ COURSE_TAGS : "należą do"
+    USERS ||--o{ ENROLLMENTS : "dokonuje"
+    COURSES ||--o{ ENROLLMENTS : "zbiera"
+
+    COURSES {
+        int id PK
+        string title
+        int category_id FK
+    }
+    CATEGORIES {
+        int id PK
+        string name
+    }
+    TAGS {
+        int id PK
+        string name
+    }
