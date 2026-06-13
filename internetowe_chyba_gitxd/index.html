@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Logowanie - System Edukacyjny</title>
+    <style>
+        body { font-family: sans-serif; background: #2c3e50; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #34495e; padding: 40px; border-radius: 10px; width: 300px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { width: 100%; padding: 10px; background: #2980b9; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #3498db; }
+        .error { color: #e74c3c; margin-top: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>Logowanie</h2>
+        <p style="font-size: 12px; color: #bdc3c7;">Admin: admin / admin123<br>Użytkownik: klient / klient123</p>
+        <input type="text" id="login" placeholder="Login">
+        <input type="password" id="haslo" placeholder="Hasło">
+        <button onclick="zaloguj()">Zaloguj się</button>
+        <div id="msg" class="error"></div>
+    </div>
+
+    <script>
+        // Czyszczenie starej sesji
+        localStorage.removeItem('user');
+
+        async function zaloguj() {
+            const login = document.getElementById('login').value;
+            const haslo = document.getElementById('haslo').value;
+            
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login, haslo })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Zapisz dane sesji w przeglądarce
+                localStorage.setItem('user', JSON.stringify(data.user));
+                // Przekieruj na odpowiedni panel
+                if (data.user.rola === 'admin') window.location.href = 'admin.html';
+                else window.location.href = 'user.html';
+            } else {
+                document.getElementById('msg').innerText = data.message;
+            }
+        }
+    </script>
+</body>
+</html>
