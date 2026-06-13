@@ -1,0 +1,8 @@
+stateDiagram-v2
+    [*] --> Logowanie
+    Logowanie --> WybórKursu : Uwierzytelniono pomyślnie
+    WybórKursu --> SprawdzenieMiejsc
+    SprawdzenieMiejsc --> ZapisNaKurs : Są wolne miejsca
+    SprawdzenieMiejsc --> WybórKursu : Brak miejsc
+    ZapisNaKurs --> ZapisW_BazieDanych
+    ZapisW_BazieDanych --> [*] : Potwierdzenie zapisu
