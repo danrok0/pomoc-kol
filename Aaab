@@ -1,0 +1,277 @@
+server
+
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+
+const app = express();
+app.use(express.static(__dirname));
+app.use(express.json());
+
+const db = new sqlite3.Database('./platforma.db');
+
+// TWORZENIE STRUKTURY BAZY DANYCH
+db.serialize(() => {
+    // Tabela autoryzacji (nie wlicza się do limitu 4)
+    db.run("CREATE TABLE IF NOT EXISTS uzytkownicy (id INTEGER PRIMARY KEY, login TEXT UNIQUE, haslo TEXT, rola TEXT)");
+    
+    // Tabele domenowe (Minimum 4, mamy 6)
+    db.run("CREATE TABLE IF NOT EXISTS kategorie (id INTEGER PRIMARY KEY, nazwa TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS tagi (id INTEGER PRIMARY KEY, nazwa TEXT)");
+    
+    // Związek 1:N (Kategoria -> Kursy)
+    db.run("CREATE TABLE IF NOT EXISTS kursy (id INTEGER PRIMARY KEY, nazwa TEXT, cena REAL, kategoria_id INTEGER, FOREIGN KEY(kategoria_id) REFERENCES kategorie(id))");
+    
+    // Związek N:M (Kursy <-> Tagi)
+    db.run("CREATE TABLE IF NOT EXISTS kursy_tagi (kurs_id INTEGER, tag_id INTEGER, FOREIGN KEY(kurs_id) REFERENCES kursy(id), FOREIGN KEY(tag_id) REFERENCES tagi(id))");
+    
+    // Tabele dla funkcjonalności nietrywialnej (Zamówienie i jego pozycje - relacja 1:N)
+    db.run("CREATE TABLE IF NOT EXISTS zamowienia (id INTEGER PRIMARY KEY, uzytkownik_id INTEGER, data TEXT, suma REAL, FOREIGN KEY(uzytkownik_id) REFERENCES uzytkownicy(id))");
+    db.run("CREATE TABLE IF NOT EXISTS pozycje_zamowienia (id INTEGER PRIMARY KEY, zamowienie_id INTEGER, kurs_id INTEGER, FOREIGN KEY(zamowienie_id) REFERENCES zamowienia(id), FOREIGN KEY(kurs_id) REFERENCES kursy(id))");
+
+    // Dane startowe - Konta do logowania
+    db.run("INSERT OR IGNORE INTO uzytkownicy (login, haslo, rola) VALUES ('admin', 'admin123', 'admin'), ('klient', 'klient123', 'user')");
+    db.run("INSERT OR IGNORE INTO kategorie (id, nazwa) VALUES (1, 'Programowanie'), (2, 'Biznes i Marketing')");
+});
+
+// --- 1. SYSTEM AUTORYZACJI (LOGOWANIE) ---
+app.post('/api/login', (req, res) => {
+    const { login, haslo } = req.body;
+    db.get("SELECT id, login, rola FROM uzytkownicy WHERE login = ? AND haslo = ?", [login, haslo], (err, row) => {
+        if (row) {
+            res.json({ success: true, user: row }); // Zwraca dane użytkownika po udanym logowaniu
+        } else {
+            res.status(401).json({ success: false, message: "Nieprawidłowy login lub hasło." });
+        }
+    });
+});
+
+// --- 2. PANEL ADMINISTRATORA (PEŁNY CRUD KURSÓW) ---
+app.get('/api/kursy', (req, res) => {
+    const sql = `SELECT k.id, k.nazwa, k.cena, k.kategoria_id, kat.nazwa as kategoria_nazwa 
+                 FROM kursy k JOIN kategorie kat ON k.kategoria_id = kat.id`;
+    db.all(sql, [], (err, rows) => res.json(rows || []));
+});
+
+app.post('/api/kursy', (req, res) => {
+    const { nazwa, cena, kategoria_id } = req.body;
+    db.run("INSERT INTO kursy (nazwa, cena, kategoria_id) VALUES (?, ?, ?)", [nazwa, cena, kategoria_id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ komunikat: "Dodano kurs" });
+    });
+});
+
+app.put('/api/kursy/:id', (req, res) => {
+    const { nazwa, cena } = req.body;
+    db.run("UPDATE kursy SET nazwa = ?, cena = ? WHERE id = ?", [nazwa, cena, req.params.id], () => {
+        res.json({ komunikat: "Zaktualizowano kurs" });
+    });
+});
+
+app.delete('/api/kursy/:id', (req, res) => {
+    db.run("DELETE FROM pozycje_zamowienia WHERE kurs_id = ?", req.params.id); // Usunięcie powiązań
+    db.run("DELETE FROM kursy WHERE id = ?", req.params.id, () => {
+        res.json({ komunikat: "Usunięto kurs" });
+    });
+});
+
+// --- 3. AKCJA NIETRYWIALNA UŻYTKOWNIKA (Złożenie zamówienia z koszyka) ---
+app.post('/api/zamowienia', (req, res) => {
+    const { uzytkownik_id, koszyk, suma } = req.body;
+    const dataZamowienia = new Date().toISOString();
+    
+    // Zapisujemy nagłówek zamówienia
+    db.run("INSERT INTO zamowienia (uzytkownik_id, data, suma) VALUES (?, ?, ?)", [uzytkownik_id, dataZamowienia, suma], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        const zamowienieId = this.lastID;
+        
+        // Zapisujemy każdą pozycję z koszyka
+        const stmt = db.prepare("INSERT INTO pozycje_zamowienia (zamowienie_id, kurs_id) VALUES (?, ?)");
+        koszyk.forEach(item => {
+            stmt.run([zamowienieId, item.id]);
+        });
+        stmt.finalize();
+
+        res.json({ success: true, message: "Zamówienie złożone pomyślnie!" });
+    });
+});
+
+app.listen(3000, () => console.log("Serwer działa na porcie 3000!"));
+
+
+
+
+
+index
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Logowanie - System Edukacyjny</title>
+    <style>
+        body { font-family: sans-serif; background: #2c3e50; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #34495e; padding: 40px; border-radius: 10px; width: 300px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { width: 100%; padding: 10px; background: #2980b9; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #3498db; }
+        .error { color: #e74c3c; margin-top: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>Logowanie</h2>
+        <p style="font-size: 12px; color: #bdc3c7;">Admin: admin / admin123<br>Użytkownik: klient / klient123</p>
+        <input type="text" id="login" placeholder="Login">
+        <input type="password" id="haslo" placeholder="Hasło">
+        <button onclick="zaloguj()">Zaloguj się</button>
+        <div id="msg" class="error"></div>
+    </div>
+
+    <script>
+        // Czyszczenie starej sesji
+        localStorage.removeItem('user');
+
+        async function zaloguj() {
+            const login = document.getElementById('login').value;
+            const haslo = document.getElementById('haslo').value;
+            
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login, haslo })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Zapisz dane sesji w przeglądarce
+                localStorage.setItem('user', JSON.stringify(data.user));
+                // Przekieruj na odpowiedni panel
+                if (data.user.rola === 'admin') window.location.href = 'admin.html';
+                else window.location.href = 'user.html';
+            } else {
+                document.getElementById('msg').innerText = data.message;
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+admin
+
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Administratora</title>
+    <style>
+        body { font-family: sans-serif; background: #ecf0f1; padding: 20px; max-width: 900px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
+        button { background: #e67e22; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+        .btn-add { background: #27ae60; padding: 10px 15px; }
+        input, select { padding: 8px; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div style="display: flex; justify-content: space-between;">
+        <h2>Witaj, Administratorze</h2>
+        <a href="index.html" style="color: red; text-decoration: none; font-weight: bold;">Wyloguj</a>
+    </div>
+
+    <div class="card">
+        <h3>Dodaj Kurs</h3>
+        <input type="text" id="nazwa" placeholder="Nazwa kursu">
+        <input type="number" id="cena" placeholder="Cena PLN">
+        <select id="kategoria">
+            <option value="1">Programowanie</option>
+            <option value="2">Biznes i Marketing</option>
+        </select>
+        <button class="btn-add" onclick="dodaj()">Zapisz do bazy</button>
+    </div>
+
+    <div class="card">
+        <h3>Baza Kursów (CRUD)</h3>
+        <table id="tabela-kursow">
+            <tr><th>Nazwa</th><th>Kategoria</th><th>Cena</th><th>Akcje</th></tr>
+        </table>
+    </div>
+
+    <script>
+        // Zabezpieczenie strony
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.rola !== 'admin') {
+            alert('Brak uprawnień!');
+            window.location.href = 'index.html';
+        }
+
+        async function laduj() {
+            const res = await fetch('/api/kursy');
+            const kursy = await res.json();
+            const tab = document.getElementById('tabela-kursow');
+            tab.innerHTML = '<tr><th>Nazwa</th><th>Kategoria</th><th>Cena</th><th>Akcje</th></tr>' + 
+                kursy.map(k => `
+                <tr>
+                    <td>${k.nazwa}</td>
+                    <td>${k.kategoria_nazwa}</td>
+                    <td>${k.cena} PLN</td>
+                    <td>
+                        <button onclick="edytuj(${k.id}, '${k.nazwa}', ${k.cena})">Edytuj</button>
+                        <button onclick="usun(${k.id})" style="background:#e74c3c;">Usuń</button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        async function dodaj() {
+            const nazwa = document.getElementById('nazwa').value;
+            const cena = document.getElementById('cena').value;
+            const kategoria_id = document.getElementById('kategoria').value;
+            await fetch('/api/kursy', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({nazwa, cena: parseFloat(cena), kategoria_id})
+            });
+            laduj();
+        }
+
+        async function edytuj(id, staraNazwa, staraCena) {
+            const nowaNazwa = prompt("Nowa nazwa:", staraNazwa);
+            const nowaCena = prompt("Nowa cena:", staraCena);
+            if(nowaNazwa && nowaCena) {
+                await fetch('/api/kursy/'+id, {
+                    method: 'PUT', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nazwa: nowaNazwa, cena: parseFloat(nowaCena)})
+                });
+                laduj();
+            }
+        }
+
+        async function usun(id) {
+            await fetch('/api/kursy/'+id, { method: 'DELETE' });
+            laduj();
+        }
+
+        laduj();
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
