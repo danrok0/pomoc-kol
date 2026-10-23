@@ -1,0 +1,655 @@
+// ==============================================================================================
+//                              PROJEKT EDUKACYJNY OPENGL (C++17)
+//                                   WERSJA DO NAUKI (TUTORIAL)
+// ==============================================================================================
+// Ten plik zawiera kompletny kod programu z ogromną liczbą szczegółowych komentarzy.
+// Wyjaśnia działanie każdej linijki, każdej funkcji OpenGL, potoku renderowania oraz
+// matematyki stojącej za shaderami.
+//
+// SPIS TREŚCI:
+// 1. Dołączanie bibliotek (Include) i ich rola
+// 2. Dane modelu (house.h)
+// 3. Zmienne globalne i sterujące
+// 4. Teoria potoku OpenGL i kody shaderów GLSL (Sceny 1, 2 i 3)
+// 5. Funkcje pomocnicze (Kompilacja shaderów, callbacki okna i klawiatury)
+// 6. Funkcja główna (main):
+//    a) Inicjalizacja GLFW, utworzenie okna i kontekstu OpenGL
+//    b) Inicjalizacja GLAD (ładowanie wskaźników funkcji sterownika GPU)
+//    c) Matematyczne generowanie kwadratów na CPU (wektory std::vector)
+//    d) Kompilacja shaderów i pobieranie lokacji zmiennych Uniform
+//    e) Architektura pamięci GPU: Bufory VBO i obiekty VAO dla Sceny 1, 2 i 3
+//    f) Nowoczesna architektura scen (Wektor funkcji / lambd)
+//    g) Główna pętla gry/renderowania (Game Loop, czyszczenie bufora, swap buffers)
+//    h) Zwalnianie zasobów (Garbage collection / sprzątanie GPU)
+// ==============================================================================================
+
+// ==============================================================================================
+// 1. DOŁĄCZANIE BIBLIOTEK (INCLUDES)
+// ==============================================================================================
+
+// GLAD (OpenGL Loading Library):
+// OpenGL na systemie Windows to w rzeczywistości tylko biblioteka opengl32.dll obsługująca wersję 1.1 z 1997 roku!
+// Wszystkie nowoczesne funkcje (shadery, bufory VAO/VBO z OpenGL 3.3+) znajdują się w sterowniku Twojej karty graficznej
+// (NVIDIA, AMD, Intel) i muszą zostać dynamicznie odszukane w pamięci RAM w czasie uruchomienia.
+// GLAD robi to automatycznie za nas.
+// WAŻNE: <glad/glad.h> MUSI być dołączony ZAWSZE PRZED <GLFW/glfw3.h>, inaczej kompilator zgłosi konflikt nagłówków!
+#include <glad/glad.h>
+
+// GLFW (Graphics Library Framework):
+// Sam OpenGL to czyste API graficzne – NIE POTRAFI sam z siebie otworzyć okna w Windowsie,
+// nie potrafi obsłużyć myszy, klawiatury ani zamknąć aplikacji.
+// GLFW jest biblioteką pomocniczą, która:
+// 1. Tworzy okno aplikacji w systemie operacyjnym (Windows/Linux/macOS).
+// 2. Tworzy tzw. "OpenGL Context" (most łączący okno z kartą graficzną).
+// 3. Przechwytuje zdarzenia: wciśnięcia klawiszy, ruch myszy, zmianę rozmiaru okna.
+#include <GLFW/glfw3.h>
+
+// Standardowe biblioteki C++:
+#include <iostream>   // Do wypisywania informacji i błędów w konsoli (std::cout, std::cerr)
+#include <vector>     // Dynamiczne tablice (std::vector) do przechowywania współrzędnych i kolorów na CPU
+#include <cstdlib>    // Zawiera funkcje rand() oraz srand() do losowania liczb
+#include <ctime>      // Zawiera time(NULL) do inicjalizacji generatora liczb losowych aktualnym czasem
+#include <functional> // Zawiera std::function, pozwalający przechowywać funkcje/lambdy w wektorze scen
+
+// ==============================================================================================
+// 2. DANE ZEWNĘTRZNE - MODEL DOMKU Z BLENDERA
+// ==============================================================================================
+#include "house.h" 
+// Plik "house.h" został wygenerowany (wyeksportowany) z programu Blender.
+// Zawiera on:
+// - #define NUMBER_OF_TRIANGLES 9    -> domek składa się dokładnie z 9 trójkątów
+// - #define NUMBER_OF_VERTICES (9*3) -> 9 trójkątów * 3 wierzchołki = 27 wierzchołków
+// - float Mesh_Vertices[] = { ... }  -> tablica 54 liczb zmiennoprzecinkowych (27 par x, y)
+// UWAGA: Blender domyślnie używa innej orientacji osi (np. Z w górę), przez co ten model
+// po eksporcie w 2D leży bokiem (dach skierowany jest w lewo). Wyprostujemy go w Vertex Shaderze!
+
+// ==============================================================================================
+// 3. STAŁE I ZMIENNE GLOBALNE
+// ==============================================================================================
+
+// ZGODNIE Z POLECENIEM ZADANIA:
+// "Niech N będzie zdefiniowane w jednym miejscu programu, aby łatwo było je zmienić."
+// N określa liczbę generowanych kwadratów w Scenie 1 oraz Scenie 2.
+// Gdy zmienisz 100 na np. 500, cały program automatycznie wygeneruje i narysuje 500 kwadratów.
+const int N = 100;
+
+// Zmienna przechowująca numer aktualnie wyświetlanej sceny:
+// 0 = Scena 1 (kwadraty o jednolitym kolorze)
+// 1 = Scena 2 (kwadraty z gradientem)
+// 2 = Scena 3 (domek z Blendera)
+int currentScene = 0;
+
+// Łączna liczba zdefiniowanych scen w programie (będzie automatycznie ustawiona na rozmiar wektora scen)
+int totalScenes = 3;
+
+// Zmienne przesunięcia (offset) domku na płaszczyźnie ekranu w Scenie 3.
+// Zwiększane / zmniejszane podczas naciskania klawiszy WSAD lub strzałek:
+// houseOffsetX: przesuwa w osi poziomej (-1.0 to lewa krawędź, +1.0 to prawa krawędź)
+// houseOffsetY: przesuwa w osi pionowej   (-1.0 to dół ekranu,      +1.0 to góra ekranu)
+float houseOffsetX = 0.0f;
+float houseOffsetY = 0.0f;
+
+// ==============================================================================================
+// 4. SHADERY (PROGRAMY URUCHAMIANE BEZPOŚREDNIO NA KORZE GRAFICZNEJ GPU)
+// ==============================================================================================
+// W nowoczesnym OpenGL (Core Profile od wersji 3.3 wzwyż) potok graficzny jest programowalny.
+// Aby cokolwiek narysować, MUSIMY dostarczyć co najmniej dwa shadery napisane w języku GLSL:
+//
+// 1. VERTEX SHADER (Shader Wierzchołków):
+//    - Uruchamia się dla KAŻDEGO wierzchołka osobno (np. dla 100 kwadratów = 600 razy na klatkę).
+//    - Jego głównym zadaniem jest obliczenie ostatecznej pozycji wierzchołka w przestrzeni ekranu
+//      i zapisanie jej do wbudowanej zmiennej `gl_Position`.
+//
+// 2. RASTERYZATOR (Układ sprzętowy GPU między shaderami):
+//    - Łączy wierzchołki w trójkąty, tnie je i zamienia na siatkę pikseli (tzw. fragmentów).
+//    - AUTOMATYCZNIE INTERPOLUJE dane przekazywane z Vertex Shadera do Fragment Shadera!
+//
+// 3. FRAGMENT SHADER (Shader Fragmentów / Pikseli):
+//    - Uruchamia się dla KAŻDEGO piksela widocznego na ekranie, który należy do danego trójkąta.
+//    - Jego jedynym celem jest ustalenie ostatecznego koloru tego piksela (RGBA) w zmiennej wyjściowej `FragColor`.
+
+// ----------------------------------------------------------------------------------------------
+// SHADERY DLA SCENY 1 ORAZ SCENY 2
+// ----------------------------------------------------------------------------------------------
+// Pytanie z treści Zadania 1: "Czy uda się wykorzystać potok napisany do sceny 1 dla sceny 2?"
+// ODPOWIEDŹ: TAK, dokładnie ten sam potok (program shaderów) obsługuje obie sceny!
+//
+// Dlaczego to działa?
+// - Vertex shader przyjmuje atrybut aColor (kolor wierzchołka) i wysyła go dalej jako ourColor.
+// - W SCENIE 1: Wszystkie 6 wierzchołków danego kwadratu dostaje z bufora identyczny kolor (np. czysty czerwony).
+//   Gdy rasteryzator interpoluje wartości czerwony -> czerwony, wynik wszędzie wynosi czerwony (płaski kolor, brak gradientu).
+// - W SCENIE 2: Każdy wierzchołek kwadratu dostaje inny losowy kolor (np. żółty, niebieski, zielony).
+//   Rasteryzator płynnie miesza kolory między wierzchołkami, co daje automatyczny, sprzętowy GRADIENT!
+const char* vertexShaderSource12 = R"(
+#version 330 core
+// Wersja GLSL 3.30 odpowiadająca OpenGL 3.3 Core Profile
+
+// layout (location = 0): Slot 0 w VAO - współrzędne 2D wierzchołka (x, y)
+layout (location = 0) in vec2 aPos;
+
+// layout (location = 1): Slot 1 w VAO - kolor RGB wierzchołka z bufora pamięci GPU (r, g, b)
+layout (location = 1) in vec3 aColor;
+
+// Zmienna wyjściowa (out): przesyła kolor z tego shadera wprost do shadera fragmentów
+out vec3 ourColor;
+
+void main() {
+    // gl_Position to wbudowana zmienna GLSL typu vec4 (x, y, z, w).
+    // OpenGL operuje na współrzędnych jednorodnych (Homogeneous Coordinates):
+    // aPos.x i aPos.y to nasza pozycja 2D na ekranie (w zakresie od -1.0 do +1.0),
+    // 0.0 to głębokość Z (dla 2D nie ma znaczenia, więc dajemy 0),
+    // 1.0 to współrzędna perspektywiczna W (dzielnik perspektywy; 1.0 oznacza brak zniekształcenia perspektywicznego).
+    gl_Position = vec4(aPos, 0.0, 1.0);
+
+    // Przekazujemy kolor dalej. Zanim trafi do fragment shadera, rasteryzator GPU
+    // dokona interpolacji liniowej tego koloru na powierzchni trójkąta.
+    ourColor = aColor;
+}
+)";
+
+const char* fragmentShaderSource12 = R"(
+#version 330 core
+
+// Zmienna wejściowa (in) o tej samej nazwie i typie co 'out' w vertex shaderze.
+// Otrzymuje zinterpolowany kolor fragmentu (piksela).
+in vec3 ourColor;
+
+// Zmienna wyjściowa: ostateczny kolor piksela w buforze ramki (RGBA)
+out vec4 FragColor;
+
+void main() {
+    // Ustawiamy kolor fragmentu:
+    // ourColor.r, ourColor.g, ourColor.b oraz 1.0 jako kanał Alpha (pełna nieprzezroczystość).
+    FragColor = vec4(ourColor, 1.0);
+}
+)";
+
+// ----------------------------------------------------------------------------------------------
+// SHADERY DLA SCENY 3 (DOMEK Z BLENDERA)
+// ----------------------------------------------------------------------------------------------
+// Wymagania z Zadania 3 (grupa dzienna):
+// 1. "Blender ma inny układ współrzędnych... domek będzie odwrócony... poeksperymentuj ze
+//    współrzędnymi w vertex shaderze. Nie zmieniaj danych w pliku house.h".
+// 2. "Aby kontrolować pozycję obiektu, prześlij zmienną jednorodną góra-dół i drugą prawo-lewo".
+// 3. "W shaderze fragmentów skorzystaj z gl_PrimitiveID oraz gl_FragCoord aby nadać inne
+//    kolory innym trójkątom. Koniecznie dodaj efekt przejścia gradientowego".
+// 4. "W tej scenie, przeciwnie do poprzednich, to shader ma decydować o kolorach".
+
+const char* vertexShaderSource3 = R"(
+#version 330 core
+layout (location = 0) in vec2 aPos;
+
+// Dwie niezależne zmienne jednorodne (uniform):
+// Zmienne 'uniform' to stałe parametry przekazywane z kodu C++ do GPU,
+// które mają taką samą wartość dla wszystkich wierzchołków danego wywołania rysowania.
+uniform float offsetX; // Kontrola pozycji poziomej (prawo-lewo, sterowane klawiszami A/D)
+uniform float offsetY; // Kontrola pozycji pionowej   (góra-dół,   sterowane klawiszami W/S)
+
+void main() {
+    // ROZWIĄZANIE PROBLEMU UKŁADU WSPÓŁRZĘDNYCH BLENDERA:
+    // W pliku house.h czubek dachu ma współrzędne (-0.65, 0.0), a podstawa ściany x = +0.25.
+    // Oznacza to, że domek leży bokiem, a jego "góra" skierowana jest w lewo na osi X!
+    // Aby go wyprostować i postawić pionowo dachem do góry bez ruszania house.h:
+    // Dokonujemy rotacji o 90 stopni zgodnie z ruchem wskazówek zegara:
+    // - nowa oś X przyjmuje starą wartość osi Y (aPos.y)
+    // - nowa oś Y przyjmuje ujemną wartość starej osi X (-aPos.x)
+    // Sprawdzenie: stary czubek dachu (-0.65, 0.0) -> nowy punkt (0.0, -(-0.65)) = (0.0, +0.65) -> IDEALNIE NA GÓRZE!
+    vec2 rotatedPos = vec2(aPos.y, -aPos.x);
+
+    // Na koniec dodajemy przesunięcie (offset) sterowane przez użytkownika z klawiatury
+    gl_Position = vec4(rotatedPos.x + offsetX, rotatedPos.y + offsetY, 0.0, 1.0);
+}
+)";
+
+const char* fragmentShaderSource3 = R"(
+#version 330 core
+out vec4 FragColor;
+
+// Wbudowane zmienne środowiskowe języka GLSL:
+// - gl_PrimitiveID: zawiera automatycznie nadawany przez GPU unikalny indeks trójkąta (0, 1, 2, ..., 8).
+// - gl_FragCoord: zawiera bezwzględne współrzędne piksela w oknie (x w pikselach [0..800], y [0..600]).
+
+void main() {
+    // WYMÓG 1: Użycie gl_PrimitiveID do zróżnicowania kolorów trójkątów:
+    // Chcemy, aby dach, komin, ściany i fundament miały różne, odcinające się kolory.
+    // Używamy klasycznego algorytmu haszującego w GLSL opartego na funkcji sinus i fract():
+    // sin(x) generuje pseudolosową falę, a fract(x) pobiera tylko część ułamkową (wartość [0.0, 1.0]).
+    float id = float(gl_PrimitiveID);
+    vec3 baseColor = vec3(
+        fract(sin(id * 12.9898 + 1.0) * 43758.5453), // Składowa R dla danego trójkąta
+        fract(sin(id * 78.2330 + 2.0) * 43758.5453), // Składowa G dla danego trójkąta
+        fract(sin(id * 45.1640 + 3.0) * 43758.5453)  // Składowa B dla danego trójkąta
+    );
+
+    // WYMÓG 2: Użycie gl_FragCoord do stworzenia efektu przejścia gradientowego:
+    // gl_FragCoord.y to pionowa pozycja fragmentu w oknie (od 0 na dole do 600 na górze okna).
+    // Za pomocą funkcji sinus modulujemy jasność trójkątów, tworząc płynne cieniowanie w pionie.
+    // Wartość sin waha się od -1 do 1, więc po pomnożeniu przez 0.25 i dodaniu 0.75 uzyskujemy zakres [0.5, 1.0].
+    float vGradient = sin(gl_FragCoord.y * 0.02) * 0.25 + 0.75;
+
+    // Dodatkowy gradient poziomy wzdłuż szerokości okna (800 pikseli):
+    // Daje to delikatne przejście ciepłego światła od lewej do prawej strony okna.
+    float hGradient = clamp(gl_FragCoord.x / 800.0, 0.0, 1.0);
+
+    // Aplikacja gradientu pionowego na kolor bazowy trójkąta:
+    vec3 shadedColor = baseColor * vGradient;
+
+    // Zmiksowanie (funkcja mix to interpolacja liniowa lerp) z ciepłym kolorem pomarańczowym (1.0, 0.6, 0.2):
+    vec3 finalColor = mix(shadedColor, vec3(1.0, 0.6, 0.2), hGradient * 0.3);
+
+    // Ostateczne przypisanie koloru piksela (RGB + Alpha = 1.0)
+    FragColor = vec4(finalColor, 1.0);
+}
+)";
+
+// ==============================================================================================
+// 5. FUNKCJE POMOCNICZE
+// ==============================================================================================
+
+// Funkcja odpowiedzialna za kompilację kodu GLSL na GPU oraz zlinkowanie w program shaderów
+unsigned int compileShader(const char* vSource, const char* fSource) {
+    int success;         // Zmienna flagowa do sprawdzania czy operacja powiodła się (GL_TRUE / GL_FALSE)
+    char infoLog[512];   // Bufor tekstowy na raport o ewentualnych błędach składni w kodzie shadera
+
+    // 1. Utworzenie pustego obiektu Vertex Shadera na GPU
+    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    // Przekazanie kodu źródłowego shadera:
+    // (uchwyt shadera, liczba ciągów znaków = 1, wskaźnik na kod źródłowy, NULL = ciąg zakończony zerem)
+    glShaderSource(vertexShader, 1, &vSource, NULL);
+    // Kompilacja kodu GLSL przez sterownik karty graficznej:
+    glCompileShader(vertexShader);
+    // Sprawdzenie czy kompilacja Vertex Shadera zakończyła się sukcesem:
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        std::cerr << "Blad kompilacji Vertex Shadera:\n" << infoLog << std::endl;
+    }
+
+    // 2. Utworzenie pustego obiektu Fragment Shadera na GPU
+    unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fSource, NULL);
+    glCompileShader(fragmentShader);
+    // Sprawdzenie błędów kompilacji Fragment Shadera:
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+        std::cerr << "Blad kompilacji Fragment Shadera:\n" << infoLog << std::endl;
+    }
+
+    // 3. Utworzenie tzw. Programu Shaderów (Shader Program)
+    // Program to zlinkowana całość: wyjścia z Vertex Shadera łączą się z wejściami Fragment Shadera.
+    unsigned int shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);   // Dołączenie skompilowanego Vertex Shadera
+    glAttachShader(shaderProgram, fragmentShader); // Dołączenie skompilowanego Fragment Shadera
+    glLinkProgram(shaderProgram);                  // Linkowanie programu
+    // Sprawdzenie poprawności linkowania:
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+        std::cerr << "Blad linkowania Programu Shadera:\n" << infoLog << std::endl;
+    }
+
+    // Po poprawnym zlinkowaniu w program wykonywalny GPU, pojedyncze obiekty shaderów
+    // nie są już potrzebne w pamięci i można je bezpiecznie skasować:
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    return shaderProgram; // Zwracamy identyfikator (uchwyt) gotowego programu cieniującego
+}
+
+// Callback wywoływany przez GLFW za każdym razem, gdy użytkownik zmieni rozmiar okna myszką:
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    // glViewport definiuje prostokąt w oknie, na którym OpenGL ma rysować.
+    // (początek x = 0, początek y = 0, szerokość w pikselach, wysokość w pikselach).
+    // Dzięki temu obraz nie rozciąga się nieprawidłowo po zmianie okna.
+    glViewport(0, 0, width, height);
+}
+
+// Callback obsługujący zdarzenia z klawiatury:
+// - window: wskaźnik na okno, które wygenerowało zdarzenie
+// - key: kod wciśniętego klawisza (np. GLFW_KEY_SPACE, GLFW_KEY_W)
+// - scancode: sprzętowy kod klawisza zależny od systemu
+// - action: co się stało (GLFW_PRESS = wciśnięcie, GLFW_RELEASE = puszczenie, GLFW_REPEAT = trzymanie klawisza)
+// - mods: wciśnięte modyfikatory (np. Shift, Alt, Ctrl)
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    // Wyjście z programu po naciśnięciu ESC:
+    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE) {
+        glfwSetWindowShouldClose(window, true); // Oznacza okno jako "do zamknięcia"
+    }
+
+    // Przełączanie scen klawiszem SPACJA:
+    // Używamy arytmetyki modulo: (currentScene + 1) % totalScenes
+    // Dla 3 scen daje to sekwencję: 0 -> 1 -> 2 -> 0 -> 1 -> ... (pełna rotacja zgodnie z treścią zadania!)
+    if (action == GLFW_PRESS && key == GLFW_KEY_SPACE) {
+        currentScene = (currentScene + 1) % totalScenes;
+        std::cout << "Przelaczono na Scene " << (currentScene + 1) << std::endl;
+    }
+
+    // Sterowanie domkiem w Scenie 3 za pomocą klawiszy WSAD lub strzałek:
+    // Obsługujemy zarówno pojedyncze wciśnięcie (GLFW_PRESS), jak i płynne trzymanie klawisza (GLFW_REPEAT).
+    float speed = 0.05f; // Krok przesunięcia przy każdym naciśnięciu
+    if ((key == GLFW_KEY_W || key == GLFW_KEY_UP) && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        houseOffsetY += speed; // Ruch w górę
+    }
+    if ((key == GLFW_KEY_S || key == GLFW_KEY_DOWN) && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        houseOffsetY -= speed; // Ruch w dół
+    }
+    if ((key == GLFW_KEY_A || key == GLFW_KEY_LEFT) && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        houseOffsetX -= speed; // Ruch w lewo
+    }
+    if ((key == GLFW_KEY_D || key == GLFW_KEY_RIGHT) && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        houseOffsetX += speed; // Ruch w prawo
+    }
+}
+
+// Funkcja losująca liczbę zmiennoprzecinkową (float) z przedziału [min, max]:
+float randomFloat(float min, float max) {
+    // rand() zwraca liczbę całkowitą od 0 do RAND_MAX.
+    // Dzieląc przez RAND_MAX otrzymujemy ułamek z zakresu [0.0, 1.0],
+    // a następnie skalujemy go do żądanego przedziału [min, max].
+    return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max - min)));
+}
+
+// ==============================================================================================
+// 6. GŁÓWNA FUNKCJA PROGRAMU (MAIN)
+// ==============================================================================================
+int main() {
+    // ------------------------------------------------------------------------------------------
+    // A) Inicjalizacja GLFW i konfiguracja wersji OpenGL
+    // ------------------------------------------------------------------------------------------
+    if (!glfwInit()) {
+        std::cerr << "Blad krytyczny: Nie udalo sie zainicjalizowac GLFW!" << std::endl;
+        return -1;
+    }
+
+    // Ustawiamy "podpowiedzi" (hints) dla GLFW określające wymagany profil OpenGL:
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);                 // Chcemy wersję główną 3
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);                 // Chcemy podwersję 3 (czyli razem OpenGL 3.3)
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // Profil CORE: bez przestarzałych funkcji jak glBegin/glEnd
+
+    // Tworzymy okno o szerokości 800 pikseli, wysokości 600 pikseli i tytule "Zadanie OpenGL - 3 Sceny"
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Zadanie OpenGL - 3 Sceny", NULL, NULL);
+    if (!window) {
+        std::cerr << "Nie udalo sie utworzyc okna GLFW!" << std::endl;
+        glfwTerminate(); // Zwalnia zasoby GLFW przed wyjściem
+        return -1;
+    }
+
+    // Aktywujemy kontekst OpenGL powiązany z utworzonym oknem w bieżącym wątku procesora:
+    glfwMakeContextCurrent(window);
+
+    // Rejestrujemy funkcje zwrotne (callbacki):
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback); // Przy zmianie rozmiaru okna
+    glfwSetKeyCallback(window, key_callback);                         // Przy zdarzeniach klawiatury
+
+    // ------------------------------------------------------------------------------------------
+    // B) Inicjalizacja biblioteki GLAD
+    // ------------------------------------------------------------------------------------------
+    // GLAD dynamicznie pobiera od sterownika karty graficznej adresy wszystkich funkcji OpenGL
+    // (np. glGenBuffers, glDrawArrays). Bez tej linijki każda funkcja OpenGL zakończyłaby się crash'em!
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        std::cerr << "Nie udalo sie zaladowac biblioteki GLAD!" << std::endl;
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return -1;
+    }
+
+    // Inicjalizacja generatora liczb losowych aktualnym czasem (aby każde uruchomienie dawało inne kwadraty)
+    srand(static_cast<unsigned int>(time(NULL)));
+
+    // ------------------------------------------------------------------------------------------
+    // C) Generowanie geometrii kwadratów na procesorze CPU (w pamięci RAM)
+    // ------------------------------------------------------------------------------------------
+    // W OpenGL nie istnieje podstawowy prymityw "GL_QUADS" w profilu Core.
+    // Każdy kwadrat musi zostać zbudowany z 2 trójkątów = 6 wierzchołków.
+    std::vector<float> squaresPositions; // Współrzędne (x, y) wierzchołków dla obu scen
+    std::vector<float> colorsFlat;       // Kolory (r, g, b) dla Sceny 1 (jednolite)
+    std::vector<float> colorsGradient;   // Kolory (r, g, b) dla Sceny 2 (różne na każdy wierzchołek)
+
+    for (int i = 0; i < N; ++i) {
+        // Losujemy położenie lewego dolnego rogu kwadratu w przestrzeni znormalizowanej [-1.0, 1.0]:
+        float x = randomFloat(-0.95f, 0.8f);
+        float y = randomFloat(-0.95f, 0.8f);
+        // Losujemy rozmiar kwadratu:
+        float size = randomFloat(0.06f, 0.16f);
+
+        // Definicja 2 trójkątów tworzących 1 kwadrat:
+        // Trójkąt A: (lewy-dół), (prawy-dół), (prawy-góra)
+        // Trójkąt B: (lewy-dół), (prawy-góra), (lewy-góra)
+        float p[] = {
+            x,        y,          // Wierzchołek 1
+            x + size, y,          // Wierzchołek 2
+            x + size, y + size,   // Wierzchołek 3
+
+            x,        y,          // Wierzchołek 4
+            x + size, y + size,   // Wierzchołek 5
+            x,        y + size    // Wierzchołek 6
+        };
+        // Dopisujemy 12 współrzędnych (6 wierzchołków * 2 floaty) do wektora:
+        squaresPositions.insert(squaresPositions.end(), p, p + 12);
+
+        // --- DANE DLA SCENY 1 (Kolor płaski / Flat): ---
+        // Losujemy jeden kolor (r, g, b) dla całego kwadratu:
+        float r = randomFloat(0.0f, 1.0f);
+        float g = randomFloat(0.0f, 1.0f);
+        float b = randomFloat(0.0f, 1.0f);
+        // I przypisujemy ten SAM kolor wszystkim 6 wierzchołkom:
+        for (int j = 0; j < 6; ++j) {
+            colorsFlat.push_back(r);
+            colorsFlat.push_back(g);
+            colorsFlat.push_back(b);
+        }
+
+        // --- DANE DLA SCENY 2 (Kolor gradientowy): ---
+        // Zgodnie z poleceniem: chcemy gradient na kwadratach.
+        // Losujemy ODMIENNY kolor dla każdego z 6 wierzchołków:
+        for (int j = 0; j < 6; ++j) {
+            colorsGradient.push_back(randomFloat(0.0f, 1.0f));
+            colorsGradient.push_back(randomFloat(0.0f, 1.0f));
+            colorsGradient.push_back(randomFloat(0.0f, 1.0f));
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // D) Kompilacja programów shaderów
+    // ------------------------------------------------------------------------------------------
+    // shader12: potok dla Sceny 1 i Sceny 2 (kolory pobierane z bufora atrybutów GPU)
+    unsigned int shader12 = compileShader(vertexShaderSource12, fragmentShaderSource12);
+
+    // shader3: potok dla Sceny 3 (domek z Blendera - kolory generowane przez Fragment Shader)
+    unsigned int shader3  = compileShader(vertexShaderSource3,  fragmentShaderSource3);
+
+    // Pobieramy "adresy" (lokacje) zmiennych uniform w shaderze sceny 3:
+    // Dzięki temu będziemy mogli w pętli renderowania przesyłać do nich wartości houseOffsetX i houseOffsetY.
+    int locOffsetX = glGetUniformLocation(shader3, "offsetX");
+    int locOffsetY = glGetUniformLocation(shader3, "offsetY");
+
+    // ------------------------------------------------------------------------------------------
+    // E) Tworzenie struktur danych na GPU (VBO i VAO)
+    // ------------------------------------------------------------------------------------------
+    // TEORIA:
+    // - VBO (Vertex Buffer Object): to tablica czystych bajtów w szybkiej pamięci VRAM karty graficznej.
+    // - VAO (Vertex Array Object): to obiekt przechowujący stan/konfigurację. Zapamiętuje:
+    //   1. Który bufor VBO jest podpięty.
+    //   2. Jak interpretować dane w buforze (gdzie jest pozycja, gdzie kolor, jaki typ danych).
+    //   Dzięki VAO przy rysowaniu wystarczy jedna komenda: glBindVertexArray(VAO), zamiast konfigurować wszystko od nowa!
+
+    unsigned int VBO_pos;   // Bufor pozycji kwadratów (współdzielony między Sceną 1 a Sceną 2!)
+    unsigned int VBO_col1;  // Bufor kolorów płaskich dla Sceny 1
+    unsigned int VBO_col2;  // Bufor kolorów gradientowych dla Sceny 2
+    unsigned int VBO_house; // Bufor współrzędnych domku dla Sceny 3
+
+    // Generujemy 4 unikalne identyfikatory buforów na GPU:
+    glGenBuffers(1, &VBO_pos);
+    glGenBuffers(1, &VBO_col1);
+    glGenBuffers(1, &VBO_col2);
+    glGenBuffers(1, &VBO_house);
+
+    // Deklarujemy 3 obiekty VAO (po jednym dla każdej sceny):
+    unsigned int VAO1, VAO2, VAO3;
+
+    // =========================================================================
+    // KONFIGURACJA VAO 1 (SCENA 1 - KWADRATY PŁASKIE)
+    // =========================================================================
+    glGenVertexArrays(1, &VAO1);
+    glBindVertexArray(VAO1); // Rozpoczynamy nagrywanie konfiguracji dla VAO1
+
+    // 1. Podpinamy i ładujemy bufor pozycji kwadratów do pamięci VRAM:
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_pos);
+    // glBufferData kopiuje dane z pamięci RAM (squaresPositions.data()) do pamięci VRAM karty graficznej:
+    // GL_STATIC_DRAW oznacza: dane wyślemy raz, a będziemy z nich rysować wielokrotnie bez modyfikacji.
+    glBufferData(GL_ARRAY_BUFFER, squaresPositions.size() * sizeof(float), squaresPositions.data(), GL_STATIC_DRAW);
+
+    // glVertexAttribPointer uczy OpenGL jak czytać te dane w Vertex Shaderze:
+    // - indeks 0: odpowiada layout (location = 0) in vec2 aPos w shaderze
+    // - 2: każdy wierzchołek ma 2 składowe (x oraz y)
+    // - GL_FLOAT: dane to liczby typu float (4 bajty każda)
+    // - GL_FALSE: nie normalizujemy liczb
+    // - 2 * sizeof(float): krok (stride) do następnego wierzchołka wynosi 8 bajtów
+    // - (void*)0: przesunięcie (offset) od początku bufora wynosi 0
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0); // Aktywujemy atrybut o indeksie 0
+
+    // 2. Podpinamy i ładujemy bufor kolorów płaskich:
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_col1);
+    glBufferData(GL_ARRAY_BUFFER, colorsFlat.size() * sizeof(float), colorsFlat.data(), GL_STATIC_DRAW);
+    // Indeks 1 odpowiada layout (location = 1) in vec3 aColor w shaderze:
+    // 3 składowe (r, g, b), krok wynosi 3 * sizeof(float) = 12 bajtów
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1); // Aktywujemy atrybut o indeksie 1
+
+    // =========================================================================
+    // KONFIGURACJA VAO 2 (SCENA 2 - KWADRATY Z GRADIENTEM)
+    // =========================================================================
+    // ZGODNIE Z POLECENIEM ZADANIA:
+    // "stwórz VAO z buforem na dane współrzędne wierzchołków z poprzedniej sceny oraz drugi bufor (nowy) z kolorami"
+    glGenVertexArrays(1, &VAO2);
+    glBindVertexArray(VAO2); // Rozpoczynamy konfigurację VAO2
+
+    // Używamy TEGO SAMEGO bufora VBO_pos co w scenie 1! Nie kopiujemy współrzędnych drugi raz do VRAM:
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_pos);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // Ale podpinamy NOWY bufor z kolorami gradientowymi (VBO_col2):
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_col2);
+    glBufferData(GL_ARRAY_BUFFER, colorsGradient.size() * sizeof(float), colorsGradient.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+
+    // =========================================================================
+    // KONFIGURACJA VAO 3 (SCENA 3 - DOMEK Z BLENDERA)
+    // =========================================================================
+    // ZGODNIE Z ZADANIEM 3:
+    // "Dołącz plik house.h do swojego programu i potraktuj tak samo jak trójkąty w zadaniach z wykładu".
+    glGenVertexArrays(1, &VAO3);
+    glBindVertexArray(VAO3);
+
+    // Podpinamy bufor dla domku i kopiujemy do niego tablicę Mesh_Vertices z pliku house.h:
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_house);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Mesh_Vertices), Mesh_Vertices, GL_STATIC_DRAW);
+    // Model domku w 2D składa się z par współrzędnych (x, y), więc konfigurujemy atrybut 0:
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // Zauważ: dla domku NIE tworzymy bufora kolorów!
+    // Zgodnie z poleceniem: "W tej scenie, przeciwnie do poprzednich, to shader ma decydować o kolorach".
+
+    // ------------------------------------------------------------------------------------------
+    // F) Architektura scen pozwalająca na łatwą rozbudowę
+    // ------------------------------------------------------------------------------------------
+    // ZGODNIE Z POLECENIEM: "Popracuj na koniec nad kodem tak, aby łatwo dodawało się nowe sceny."
+    //
+    // Tradycyjne podejście ze switchem w pętli głównej jest nieoptymalne i trudne w utrzymaniu.
+    // Zastosowaliśmy profesjonalny wzorzec: wektor funkcji (lambd) std::vector<std::function<void()>>.
+    // Każda scena jest całkowicie niezależną funkcją rysującą.
+    // Aby dodać Scenę 4, wystarczy po prostu dopisać kolejną lambdę do listy `sceneList`!
+    // Cały system (liczba scen, modulo przy spacji) zaktualizuje się automatycznie.
+    std::vector<std::function<void()>> sceneList = {
+        // --- SCENA 1: Kwadraty jednolite ---
+        [&]() {
+            glUseProgram(shader12);            // Aktywujemy program cieniujący 1&2
+            glBindVertexArray(VAO1);           // Podpinamy VAO z buforem pozycji i buforem kolorów płaskich
+            // glDrawArrays rysuje prymitywy z podpiętego VAO:
+            // - GL_TRIANGLES: co 3 wierzchołki tworzą jeden trójkąt
+            // - 0: zaczynamy od wierzchołka o indeksie 0
+            // - N * 6: liczba wierzchołków do narysowania (100 kwadratów * 6 wierzchołków = 600)
+            glDrawArrays(GL_TRIANGLES, 0, N * 6);
+        },
+
+        // --- SCENA 2: Kwadraty z gradientem ---
+        [&]() {
+            glUseProgram(shader12);            // Używamy tego samego potoku co w scenie 1!
+            glBindVertexArray(VAO2);           // Ale podpinamy VAO2 z nowym buforem kolorów gradientowych
+            glDrawArrays(GL_TRIANGLES, 0, N * 6);
+        },
+
+        // --- SCENA 3: Domek z Blendera sterowany WSAD ---
+        [&]() {
+            glUseProgram(shader3);             // Aktywujemy dedykowany program dla domku
+            // Przesyłamy bieżące wartości przesunięcia do zmiennych uniform na karcie graficznej:
+            glUniform1f(locOffsetX, houseOffsetX);
+            glUniform1f(locOffsetY, houseOffsetY);
+            glBindVertexArray(VAO3);           // Podpinamy VAO z wierzchołkami z house.h
+            // Rysujemy NUMBER_OF_VERTICES (27 wierzchołków = 9 trójkątów)
+            glDrawArrays(GL_TRIANGLES, 0, NUMBER_OF_VERTICES);
+        }
+    };
+
+    // Automatycznie pobieramy liczbę scen z wektora (dzięki temu spacja zawsze działa poprawnie):
+    totalScenes = static_cast<int>(sceneList.size());
+
+    // Informacje w konsoli dla użytkownika:
+    std::cout << "==================================================\n";
+    std::cout << "Program uruchomiony pomyslnie!\n";
+    std::cout << "Klawisz [SPACJA]  - Przelaczanie scen rotacyjnie\n";
+    std::cout << "Klawisze [WSAD]   - Przesuwanie domku w Scenie 3\n";
+    std::cout << "Klawisz [ESC]     - Wyjscie z programu\n";
+    std::cout << "==================================================" << std::endl;
+
+    // ------------------------------------------------------------------------------------------
+    // G) Główna pętla programu (Game / Render Loop)
+    // ------------------------------------------------------------------------------------------
+    // Pętla wykonuje się nieprzerwanie w każdej klatce (np. 60 lub 144 razy na sekundę),
+    // dopóki użytkownik nie zamknie okna krzyżykiem lub klawiszem ESC.
+    while (!glfwWindowShouldClose(window)) {
+        // 1. Ustawiamy kolor tła (RGBA) przy czyszczeniu ekranu:
+        // Ciemnoszary z lekkim odcieniem granatu (0.12, 0.12, 0.14) daje świetny kontrast dla kolorów
+        glClearColor(0.12f, 0.12f, 0.14f, 1.0f);
+        // Czyścimy bufor koloru (Color Buffer) przed rysowaniem nowej klatki:
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // 2. Wywołujemy funkcję renderującą dla aktualnie wybranej sceny:
+        sceneList[currentScene]();
+
+        // 3. Podwójne buforowanie (Double Buffering):
+        // Karta graficzna rysuje nową klatkę w niewidocznym buforze tylnym (Back Buffer).
+        // glfwSwapBuffers zamienia bufor tylny z przednim (widocznym na monitorze).
+        // Zapobiega to efektowi migotania i rozrywania obrazu (tzw. screen tearing).
+        glfwSwapBuffers(window);
+
+        // 4. Obsługa zdarzeń systemu operacyjnego:
+        // Sprawdza czy użytkownik wcisnął klawisz, kliknął myszą lub zmienił rozmiar okna,
+        // i wywołuje odpowiednie zarejestrowane callbacki (np. key_callback).
+        glfwPollEvents();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // H) Sprzątanie pamięci i zakończenie programu
+    // ------------------------------------------------------------------------------------------
+    // Po wyjściu z pętli zwalniamy wszystkie zaalokowane zasoby na karcie graficznej GPU:
+    glDeleteVertexArrays(1, &VAO1);
+    glDeleteVertexArrays(1, &VAO2);
+    glDeleteVertexArrays(1, &VAO3);
+    glDeleteBuffers(1, &VBO_pos);
+    glDeleteBuffers(1, &VBO_col1);
+    glDeleteBuffers(1, &VBO_col2);
+    glDeleteBuffers(1, &VBO_house);
+    glDeleteProgram(shader12);
+    glDeleteProgram(shader3);
+
+    // Zamykamy okno i czyścimy bibliotekę GLFW:
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
+    return 0; // Pomyślne zakończenie działania aplikacji
+}
