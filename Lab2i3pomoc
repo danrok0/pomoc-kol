@@ -1,0 +1,11 @@
+"args": [
+    "-fdiagnostics-color=always",
+    "-g",
+    "${fileDirname}\\*.cpp",
+    "${fileDirname}\\glad.c",
+    "-lglfw3",
+    "-lgdi32",
+    "-lopengl32",
+    "-o",
+    "${fileDirname}\\${fileBasenameNoExtension}.exe"
+],
